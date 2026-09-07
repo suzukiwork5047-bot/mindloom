@@ -1,0 +1,1603 @@
+<title>Mindloom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#FAF6ED; --bg-dot:#E3DBC7; --surface:#FFFFFF; --surface-2:#F1EADB;
+    --ink:#26232C; --ink-soft:#726C78; --border:#E1D9C6;
+    --accent:#4B45CE; --accent-soft:#EDECFB; --accent-ink:#FFFFFF;
+    --danger:#C7443C; --danger-soft:#FBE9E7;
+    --shadow-sm:0 1px 2px rgba(38,35,44,.06), 0 1px 1px rgba(38,35,44,.04);
+    --shadow-md:0 10px 30px -10px rgba(38,35,44,.28), 0 2px 8px rgba(38,35,44,.08);
+    --shadow-lg:0 20px 60px -12px rgba(38,35,44,.35), 0 4px 16px rgba(38,35,44,.12);
+    --radius:16px;
+    --font-display:'Fraunces','Hiragino Mincho ProN','Yu Mincho',serif;
+    --font-body:'Inter','Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',monospace;
+    --branch-0:#DD5B4E; --branch-1:#D98E2C; --branch-2:#3E8E45; --branch-3:#1C9686;
+    --branch-4:#3B7FC4; --branch-5:#6A61E0; --branch-6:#BD4C8F; --branch-7:#8A5CBE;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#15161D; --bg-dot:#232532; --surface:#1D1F29; --surface-2:#22242F;
+      --ink:#EDEAF3; --ink-soft:#9C96AC; --border:#2E3040;
+      --accent:#8D85FF; --accent-soft:#2A2761; --accent-ink:#15161D;
+      --danger:#E28079; --danger-soft:#3A2220;
+      --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+      --shadow-md:0 10px 30px -8px rgba(0,0,0,.55), 0 2px 10px rgba(0,0,0,.35);
+      --shadow-lg:0 24px 70px -14px rgba(0,0,0,.65), 0 6px 20px rgba(0,0,0,.4);
+      --branch-0:#F0857A; --branch-1:#F0AA5C; --branch-2:#6BC470; --branch-3:#45C7B0;
+      --branch-4:#6EB2ED; --branch-5:#A79CFF; --branch-6:#E285BC; --branch-7:#B592E8;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#15161D; --bg-dot:#232532; --surface:#1D1F29; --surface-2:#22242F;
+    --ink:#EDEAF3; --ink-soft:#9C96AC; --border:#2E3040;
+    --accent:#8D85FF; --accent-soft:#2A2761; --accent-ink:#15161D;
+    --danger:#E28079; --danger-soft:#3A2220;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 10px 30px -8px rgba(0,0,0,.55), 0 2px 10px rgba(0,0,0,.35);
+    --shadow-lg:0 24px 70px -14px rgba(0,0,0,.65), 0 6px 20px rgba(0,0,0,.4);
+    --branch-0:#F0857A; --branch-1:#F0AA5C; --branch-2:#6BC470; --branch-3:#45C7B0;
+    --branch-4:#6EB2ED; --branch-5:#A79CFF; --branch-6:#E285BC; --branch-7:#B592E8;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+    overflow:hidden; -webkit-tap-highlight-color:transparent;
+  }
+  #app{position:fixed; inset:0; overflow:hidden; background:var(--bg);}
+
+  /* ---------- canvas ---------- */
+  #canvas-wrap{position:absolute; inset:0; cursor:grab;}
+  #canvas-wrap.panning{cursor:grabbing;}
+  #canvas-wrap.node-dragging{cursor:default;}
+  svg#canvas-svg{width:100%; height:100%; display:block;}
+  svg#canvas-svg{
+    background-color:var(--bg);
+    background-image:radial-gradient(var(--bg-dot) 1.4px, transparent 1.4px);
+    background-size:26px 26px;
+  }
+  .connector{fill:none; stroke-linecap:round;}
+  .node-card{
+    display:inline-flex; align-items:center; gap:6px; max-width:100%;
+    padding:9px 16px; border-radius:14px; background:var(--surface);
+    border:1.6px solid var(--border); box-shadow:var(--shadow-sm);
+    font-family:var(--font-body); font-size:14.5px; line-height:1.4; color:var(--ink);
+    cursor:pointer; user-select:none; white-space:normal; word-break:break-word;
+    transition:box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
+  }
+  .node-card[data-shape="pill"]{border-radius:999px;}
+  /* "text" shape: no box, just a small colored marker + plain label,
+     matching a horizontal logic-tree look. A soft highlight stands in
+     for the box on hover/selection so it still reads as interactive. */
+  .node-card[data-shape="text"]{
+    background:transparent; border:none; box-shadow:none; border-radius:8px; padding:5px 7px 5px 4px;
+  }
+  .node-card[data-shape="text"]:hover{background:var(--surface-2);}
+  .node-card[data-shape="text"].is-selected{background:var(--accent-soft); box-shadow:none;}
+  .node-card[data-size="s"]{font-size:12.5px; padding:6px 12px;}
+  .node-card[data-size="l"]{font-size:17px; padding:12px 20px;}
+  .node-card[data-shape="text"][data-size="s"]{font-size:12.5px; padding:4px 6px 4px 4px;}
+  .node-card[data-shape="text"][data-size="l"]{font-size:17px; padding:6px 8px 6px 4px;}
+  .node-card[data-bold="1"]{font-weight:700;}
+  .node-card.is-selected{box-shadow:0 0 0 3px var(--sel-ring, var(--accent)), var(--shadow-md);}
+  .node-marker{
+    width:9px; height:9px; border-radius:999px; flex-shrink:0; background:var(--surface);
+    border:2px solid var(--border-color, var(--ink-soft));
+  }
+  .node-card.is-root{
+    font-family:var(--font-body); font-weight:700; font-size:22px;
+    background:transparent; color:var(--ink); border:none; box-shadow:none;
+    border-radius:8px; padding:5px 8px;
+  }
+  .node-card.is-root:hover{background:var(--surface-2);}
+  .node-card.is-root.is-selected{background:var(--accent-soft); box-shadow:none;}
+  .node-icon{font-size:1.05em; line-height:1;}
+  .node-text{outline:none; min-width:2px; cursor:text; white-space:pre-wrap;}
+  .node-text[contenteditable="true"]{cursor:text;}
+  .node-collapse{
+    position:absolute; width:20px; height:20px; border-radius:999px; border:1.6px solid var(--border);
+    background:var(--surface); color:var(--ink-soft); font-size:11px; display:flex; align-items:center;
+    justify-content:center; cursor:pointer; box-shadow:var(--shadow-sm); font-family:var(--font-mono);
+    right:-10px; top:50%; transform:translateY(-50%); z-index:2;
+  }
+  .node-collapse:hover{color:var(--ink); border-color:var(--ink-soft);}
+  .node-fo{overflow:visible;}
+  .node-outer{position:relative; display:inline-flex;}
+
+  /* ---------- chrome ---------- */
+  .chrome{position:absolute; z-index:10; font-family:var(--font-body);}
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow-md);
+  }
+  .icon-btn{
+    width:36px; height:36px; border-radius:10px; border:none; background:transparent; color:var(--ink);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px;
+  }
+  .icon-btn:hover{background:var(--surface-2);}
+  .icon-btn:disabled{opacity:.35; cursor:default;}
+  .icon-btn:disabled:hover{background:transparent;}
+  .icon-btn.active{background:var(--accent-soft); color:var(--accent);}
+
+  #topbar{top:16px; left:16px; right:16px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; pointer-events:none;}
+  #topbar>*{pointer-events:auto;}
+  #brandrow{display:flex; align-items:center; gap:10px;}
+  #brand{
+    display:flex; align-items:center; gap:8px; padding:9px 14px; border-radius:999px;
+  }
+  #brand .mark{font-size:18px;}
+  #brand .name{font-family:var(--font-display); font-weight:600; font-size:16px; letter-spacing:.2px;}
+  #maptitle-btn{
+    display:flex; align-items:center; gap:6px; padding:9px 14px 9px 16px; cursor:pointer; max-width:280px;
+  }
+  #maptitle-btn .t{font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #maptitle-btn .chev{font-size:10px; color:var(--ink-soft);}
+  #toolbar{display:flex; align-items:center; gap:2px; padding:5px;}
+  #toolbar .sep{width:1px; height:20px; background:var(--border); margin:0 5px;}
+  #zoomlabel{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); width:40px; text-align:center;}
+
+  #mapsdrawer{position:absolute; top:64px; left:16px; width:290px; max-height:70vh; overflow:auto; display:none; padding:8px; z-index:20;}
+  #mapsdrawer.open{display:block;}
+  #mapsdrawer .row{display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:10px; cursor:pointer;}
+  #mapsdrawer .row:hover{background:var(--surface-2);}
+  #mapsdrawer .row.current{background:var(--accent-soft);}
+  #mapsdrawer .row .ttl{flex:1; font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  #mapsdrawer .row .meta{font-size:11px; color:var(--ink-soft); font-family:var(--font-mono);}
+  #mapsdrawer .row .del{opacity:0; font-size:13px; color:var(--ink-soft); padding:4px;}
+  #mapsdrawer .row:hover .del{opacity:1;}
+  #mapsdrawer .row .del:hover{color:var(--danger);}
+  #mapsdrawer .newmap{display:flex; align-items:center; gap:8px; padding:10px; margin-top:4px; border-radius:10px; cursor:pointer; color:var(--accent); font-weight:600; font-size:13.5px; border:1.4px dashed var(--border);}
+  #mapsdrawer .newmap:hover{background:var(--accent-soft); border-color:var(--accent);}
+  #mapsdrawer .divider{height:1px; background:var(--border); margin:6px 2px;}
+  #mapsdrawer .hint{font-size:11.5px; color:var(--ink-soft); padding:6px 10px 2px;}
+
+  #stylepanel{position:absolute; top:64px; right:16px; width:250px; padding:14px; display:none; z-index:20;}
+  #stylepanel.open{display:block;}
+  #stylepanel h4{margin:0 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600;}
+  #stylepanel .block{margin-bottom:14px;}
+  #stylepanel .swrow{display:flex; flex-wrap:wrap; gap:7px;}
+  .swatch{width:24px; height:24px; border-radius:999px; cursor:pointer; border:2px solid transparent; box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);}
+  .swatch.sel{border-color:var(--ink);}
+  .swatch.custom{background:conic-gradient(from 180deg,#e15,#fb3,#3d9,#39d,#93e,#e15); position:relative;}
+  .swatch input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .seg{display:flex; border:1.4px solid var(--border); border-radius:10px; overflow:hidden;}
+  .seg button{flex:1; border:none; background:var(--surface); color:var(--ink-soft); padding:7px 0; font-size:12.5px; cursor:pointer; font-family:var(--font-body); border-right:1.4px solid var(--border);}
+  .seg button:last-child{border-right:none;}
+  .seg button.on{background:var(--accent); color:var(--accent-ink); font-weight:600;}
+  .emojirow{display:flex; flex-wrap:wrap; gap:6px;}
+  .emojirow button{width:28px; height:28px; border-radius:8px; border:1.4px solid var(--border); background:var(--surface); font-size:14px; cursor:pointer;}
+  .emojirow button:hover{background:var(--surface-2);}
+  .emojirow button.on{border-color:var(--accent); background:var(--accent-soft);}
+  #iconinput{width:100%; border:1.4px solid var(--border); border-radius:9px; padding:7px 9px; font-size:13.5px; background:var(--surface); color:var(--ink); font-family:var(--font-body);}
+  .actrow{display:flex; gap:8px; margin-top:16px;}
+  .btn{border:none; border-radius:10px; padding:9px 12px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-body); flex:1;}
+  .btn.primary{background:var(--accent); color:var(--accent-ink);}
+  .btn.ghost{background:var(--surface-2); color:var(--ink);}
+  .btn.danger{background:var(--danger-soft); color:var(--danger);}
+  .btn:hover{filter:brightness(1.05);}
+
+  #bottombar{bottom:16px; left:16px; display:flex; align-items:center; gap:6px; padding:5px;}
+  #helpbar{bottom:16px; right:16px; display:flex; align-items:center; gap:6px; padding:5px;}
+
+  #shortcuts{position:absolute; bottom:64px; right:16px; width:250px; padding:14px 16px; display:none; z-index:20;}
+  #shortcuts.open{display:block;}
+  #shortcuts h4{margin:0 0 10px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600;}
+  #shortcuts .row{display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:12.5px;}
+  #shortcuts kbd{font-family:var(--font-mono); background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:1.5px 6px; font-size:11px; color:var(--ink-soft);}
+
+  /* modal + toast */
+  #modalveil{position:fixed; inset:0; background:rgba(20,18,14,.4); display:none; align-items:center; justify-content:center; z-index:100;}
+  #modalveil.open{display:flex;}
+  #modalbox{width:380px; padding:22px; border-radius:18px;}
+  #modalbox h3{margin:0 0 8px; font-family:var(--font-display); font-size:19px; font-weight:600;}
+  #modalbox p{margin:0 0 16px; font-size:13.5px; color:var(--ink-soft); line-height:1.55;}
+  #modalbox .linkrow{display:flex; gap:8px; margin-bottom:14px;}
+  #modalbox input[type=text]{flex:1; border:1.4px solid var(--border); border-radius:9px; padding:9px 10px; font-size:13px; font-family:var(--font-mono); background:var(--surface-2); color:var(--ink);}
+  #modalbox .actrow{margin-top:4px;}
+
+  #toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(10px); padding:11px 18px; border-radius:11px; background:var(--ink); color:var(--bg); font-size:13px; font-weight:500; z-index:200; opacity:0; transition:opacity .18s ease, transform .18s ease; pointer-events:none;}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  :root[data-theme="dark"] #toast, :root:not([data-theme="light"]) #toast{background:var(--surface); color:var(--ink); border:1px solid var(--border);}
+
+  ::selection{background:var(--accent-soft);}
+  input:focus-visible, button:focus-visible, [contenteditable]:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+</style>
+
+<div id="app">
+  <div id="canvas-wrap">
+    <svg id="canvas-svg" xmlns="http://www.w3.org/2000/svg">
+      <g id="viewport">
+        <g id="connectors"></g>
+        <g id="nodes"></g>
+      </g>
+    </svg>
+  </div>
+
+  <div class="chrome" id="topbar">
+    <div id="brandrow">
+      <div id="brand" class="panel"><span class="mark">🧠</span><span class="name">Mindloom</span></div>
+      <div id="maptitle-btn" class="panel"><span class="t" id="maptitle-text">マップ</span><span class="chev">▾</span></div>
+    </div>
+    <div id="toolbar" class="panel">
+      <button class="icon-btn" id="btn-undo" title="元に戻す (Ctrl+Z)">↶</button>
+      <button class="icon-btn" id="btn-redo" title="やり直す (Ctrl+Shift+Z)">↷</button>
+      <div class="sep"></div>
+      <button class="icon-btn" id="btn-zoomout" title="縮小 (-)">－</button>
+      <span id="zoomlabel">100%</span>
+      <button class="icon-btn" id="btn-zoomin" title="拡大 (+)">＋</button>
+      <button class="icon-btn" id="btn-fit" title="全体表示 (0)">⤢</button>
+      <div class="sep"></div>
+      <button class="icon-btn" id="btn-export" title="書き出し">⇩</button>
+      <button class="icon-btn" id="btn-import" title="読み込み">⇧</button>
+      <button class="icon-btn" id="btn-share" title="共有リンクを作成">🔗</button>
+      <div class="sep"></div>
+      <button class="icon-btn" id="btn-theme" title="テーマ切替">◐</button>
+    </div>
+  </div>
+
+  <div id="mapsdrawer" class="panel"></div>
+  <input type="file" id="filepicker" accept="application/json" style="display:none">
+
+  <div id="stylepanel" class="panel">
+    <div class="block">
+      <h4>色</h4>
+      <div class="swrow" id="colorrow"></div>
+    </div>
+    <div class="block">
+      <h4>太さ</h4>
+      <div class="seg" id="boldseg"><button data-v="0">標準</button><button data-v="1">太字</button></div>
+    </div>
+    <div class="block">
+      <h4>サイズ</h4>
+      <div class="seg" id="sizeseg"><button data-v="s">S</button><button data-v="m">M</button><button data-v="l">L</button></div>
+    </div>
+    <div class="block">
+      <h4>形</h4>
+      <div class="seg" id="shapeseg"><button data-v="text">テキスト</button><button data-v="card">カード</button><button data-v="pill">丸型</button></div>
+    </div>
+    <div class="block">
+      <h4>アイコン</h4>
+      <div class="emojirow" id="emojirow"></div>
+    </div>
+    <div class="actrow">
+      <button class="btn ghost" id="btn-duplicate">複製</button>
+      <button class="btn danger" id="btn-delete">削除</button>
+    </div>
+  </div>
+
+  <div class="chrome panel" id="bottombar">
+    <button class="icon-btn" id="btn-newmap" title="新しいマップ (Tabキーで子ノード追加も可)">＋</button>
+  </div>
+  <div class="chrome panel" id="bottombar2" style="bottom:16px; left:64px; padding:5px; display:flex; align-items:center; gap:6px;">
+    <span style="font-size:12px; color:var(--ink-soft); padding:0 6px; font-family:var(--font-mono);">Enter: 兄弟追加 / Tab: 子追加 / ⇧+Enter: 改行</span>
+  </div>
+  <div class="chrome" id="helpbar">
+    <button class="icon-btn panel" id="btn-help" title="ショートカット一覧">？</button>
+  </div>
+
+  <div id="shortcuts" class="panel">
+    <h4>キーボードショートカット</h4>
+    <div class="row"><span>兄弟ノードを追加</span><kbd>Enter</kbd></div>
+    <div class="row"><span>ノード内で改行</span><kbd>⇧+Enter</kbd></div>
+    <div class="row"><span>子ノードを追加</span><kbd>Tab</kbd></div>
+    <div class="row"><span>編集開始</span><kbd>F2 / ダブルクリック</kbd></div>
+    <div class="row"><span>ノードを削除</span><kbd>Delete</kbd></div>
+    <div class="row"><span>複製</span><kbd>⌘/Ctrl+D</kbd></div>
+    <div class="row"><span>元に戻す</span><kbd>⌘/Ctrl+Z</kbd></div>
+    <div class="row"><span>やり直す</span><kbd>⌘/Ctrl+⇧+Z</kbd></div>
+    <div class="row"><span>選択移動</span><kbd>↑↓←→</kbd></div>
+    <div class="row"><span>ズーム</span><kbd>+ / − / 0</kbd></div>
+  </div>
+</div>
+
+<div id="modalveil"><div id="modalbox" class="panel"></div></div>
+<div id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================== 定数 ============================== */
+var BRANCH_COUNT = 8;
+var SIZE_PX = {s:13, m:15, l:18};
+var SIZE_MAXW = {s:160, m:210, l:250};
+var LINE_H = 1.4;
+var PAD_X = {s:12,m:16,l:20}, PAD_Y = {s:6,m:9,l:12};
+var EMOJI_SET = ["💡","🚀","✅","⭐","🔥","📌","❤️","🎯","📚","🌱","⚡","🎨"];
+
+var uidCounter = 0;
+function uid(){ uidCounter++; return "n" + Date.now().toString(36) + uidCounter.toString(36) + Math.random().toString(36).slice(2,6); }
+
+/* ============================== 状態 ============================== */
+var state = {
+  maps: {},
+  currentMapId: null,
+  selectedId: null,
+  editingId: null,
+  view: {x:0, y:0, scale:1},
+  theme: "system"
+};
+var historyStack = [];
+var redoStack = [];
+var nodeEls = {}; // id -> {fo, card, iconEl, textEl, collapseBtn}
+var downloadsApi = null;
+
+/* ============================== ユーティリティ ============================== */
+function $(sel){ return document.querySelector(sel); }
+function el(tag, ns){ return ns ? document.createElementNS("http://www.w3.org/2000/svg", tag) : document.createElement(tag); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+function toast(msg){
+  var t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._h);
+  toast._h = setTimeout(function(){ t.classList.remove("show"); }, 2400);
+}
+
+/* canvas ベースの正確なテキスト計測 */
+var measureCanvas = document.createElement("canvas");
+var measureCtx = measureCanvas.getContext("2d");
+function fontString(node){
+  var w = node.bold ? 700 : 500;
+  var sz = SIZE_PX[node.size] || SIZE_PX.m;
+  if(node.id === "root"){ w = 700; sz = 22; }
+  return w + " " + sz + "px Inter, sans-serif";
+}
+function isCJK(ch){ return /[　-ヿ㐀-鿿豈-﫿＀-￯]/.test(ch); }
+function segmentForWrap(text){
+  var tokens = [], buf = "";
+  for(var i=0;i<text.length;i++){
+    var ch = text[i];
+    if(isCJK(ch)){ if(buf){tokens.push(buf); buf="";} tokens.push(ch); }
+    else if(ch === " "){ if(buf){tokens.push(buf); buf="";} tokens.push(" "); }
+    else { buf += ch; }
+  }
+  if(buf) tokens.push(buf);
+  return tokens;
+}
+function wrapParagraph(para, maxW){
+  var tokens = segmentForWrap(para);
+  var lines = [""];
+  for(var i=0;i<tokens.length;i++){
+    var tok = tokens[i];
+    if(tok === " "){
+      var cur = lines[lines.length-1];
+      if(cur.length===0) continue;
+      lines[lines.length-1] = cur + " ";
+      continue;
+    }
+    var cur2 = lines[lines.length-1];
+    var trial = cur2 + tok;
+    var w = measureCtx.measureText(trial.replace(/\s+$/,"")).width;
+    if(w > maxW && cur2.trim().length>0){
+      lines.push(tok);
+    } else {
+      lines[lines.length-1] = trial;
+    }
+  }
+  return lines;
+}
+function measureNodeBox(node){
+  var text = (node.text || "").trim() || " ";
+  var isRoot = node.id === "root";
+  var sizeKey = isRoot ? "l" : (node.size || "m");
+  var isTextShape = !isRoot && (node.shape || "text") === "text";
+  measureCtx.font = fontString(node);
+  var maxW = isRoot ? 480 : (isTextShape ? 560 : (SIZE_MAXW[sizeKey] || SIZE_MAXW.m));
+  var lines = [];
+  text.split("\n").forEach(function(para){
+    lines = lines.concat(wrapParagraph(para, maxW));
+  });
+  if(lines.length === 0) lines = [""];
+  var lineWidths = lines.map(function(l){ return measureCtx.measureText(l.replace(/\s+$/,"")).width; });
+  var textW = Math.min(maxW, Math.max.apply(null, lineWidths.concat([10])));
+  var sz = isRoot ? 22 : (SIZE_PX[sizeKey]||SIZE_PX.m);
+  var lineH = sz * LINE_H;
+  var padX = isRoot ? 8 : (isTextShape ? 6 : (PAD_X[sizeKey]||PAD_X.m));
+  var padY = isRoot ? 6 : (isTextShape ? 5 : (PAD_Y[sizeKey]||PAD_Y.m));
+  var iconW = node.icon ? sz*1.15 + 6 : 0;
+  var markerW = isTextShape ? 9 + 8 : 0; // marker circle + gap before text
+  var w = textW + iconW + markerW + padX*2 + 4;
+  var h = lines.length * lineH + padY*2 + 2;
+  return {w:Math.ceil(w), h:Math.ceil(h), lines: lines.length};
+}
+
+/* ============================== 永続化 ============================== */
+var LS_MAPS = "mindloom.maps.v1";
+var LS_LAST = "mindloom.lastMapId.v1";
+var saveTimer = null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistNow, 350);
+}
+function persistNow(){
+  try{
+    var toSave = {};
+    Object.keys(state.maps).forEach(function(id){
+      var m = state.maps[id];
+      toSave[id] = m;
+    });
+    localStorage.setItem(LS_MAPS, JSON.stringify(toSave));
+    localStorage.setItem(LS_LAST, state.currentMapId || "");
+  }catch(e){ /* best-effort */ }
+}
+function loadPersisted(){
+  try{
+    var raw = localStorage.getItem(LS_MAPS);
+    if(raw){ state.maps = JSON.parse(raw) || {}; }
+  }catch(e){ state.maps = {}; }
+  var last = null;
+  try{ last = localStorage.getItem(LS_LAST); }catch(e){}
+  if(last && state.maps[last]) state.currentMapId = last;
+}
+
+/* ============================== マップ / ノード操作 ============================== */
+function branchColorVar(idx){ return "var(--branch-" + (((idx%BRANCH_COUNT)+BRANCH_COUNT)%BRANCH_COUNT) + ")"; }
+
+function newNode(parentId, text, order){
+  return {
+    id: uid(), text: text || "", parentId: parentId || null, order: order || 0,
+    color: null, bold:false, size:"m", shape:"text", icon:"", collapsed:false,
+    manualOffset: null, branchColorIndex: null
+  };
+}
+
+function createMap(title, sample){
+  var id = uid();
+  var root = newNode(null, title || "新しいマインドマップ", 0);
+  root.id = "root";
+  var m = { id:id, title: title || "新しいマインドマップ", rootId:"root", nodes:{}, createdAt:Date.now(), updatedAt:Date.now() };
+  m.nodes[root.id] = root;
+  state.maps[id] = m;
+  if(sample) fillSample(m);
+  return id;
+}
+function fillSample(m){
+  m.title = "旅行の計画";
+  m.nodes.root.text = "旅行の計画";
+  var branches = [
+    ["交通手段", ["新幹線を予約", "現地でレンタカー"]],
+    ["宿泊", ["温泉旅館を探す", "口コミを確認"]],
+    ["観光スポット", ["水族館", "旧市街を散策"]],
+    ["持ち物リスト", ["カメラ", "常備薬"]]
+  ];
+  branches.forEach(function(b, i){
+    var child = newNode("root", b[0], i);
+    child.branchColorIndex = i;
+    m.nodes[child.id] = child;
+    b[1].forEach(function(t, j){
+      var gc = newNode(child.id, t, j);
+      m.nodes[gc.id] = gc;
+    });
+  });
+}
+
+function getMap(){ return state.maps[state.currentMapId] || null; }
+function getNode(id){ var m=getMap(); return m ? m.nodes[id] : null; }
+function getChildren(id){
+  var m = getMap(); if(!m) return [];
+  var out = [];
+  Object.keys(m.nodes).forEach(function(k){ if(m.nodes[k].parentId === id) out.push(m.nodes[k]); });
+  out.sort(function(a,b){ return a.order - b.order; });
+  return out;
+}
+function getParent(id){ var n = getNode(id); return n && n.parentId ? getNode(n.parentId) : null; }
+function nextBranchColorIndex(){
+  var kids = getChildren("root");
+  return kids.length % BRANCH_COUNT;
+}
+function nodeDepth(id){
+  var d = 0, n = getNode(id);
+  while(n && n.parentId){ n = getNode(n.parentId); d++; }
+  return d;
+}
+function nodeBranchColorIndex(id){
+  var n = getNode(id);
+  while(n && n.parentId !== "root" && n.parentId !== null){ n = getNode(n.parentId); }
+  if(n && n.branchColorIndex != null) return n.branchColorIndex;
+  return 0;
+}
+
+function pushHistory(){
+  var m = getMap(); if(!m) return;
+  historyStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId}));
+  if(historyStack.length > 60) historyStack.shift();
+  redoStack.length = 0;
+}
+function undo(){
+  var m = getMap(); if(!m || historyStack.length===0) return;
+  redoStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId}));
+  var prev = JSON.parse(historyStack.pop());
+  m.nodes = prev.nodes; m.rootId = prev.rootId;
+  state.selectedId = state.selectedId && m.nodes[state.selectedId] ? state.selectedId : null;
+  state.editingId = null;
+  fullRender(); scheduleSave();
+}
+function redo(){
+  var m = getMap(); if(!m || redoStack.length===0) return;
+  historyStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId}));
+  var next = JSON.parse(redoStack.pop());
+  m.nodes = next.nodes; m.rootId = next.rootId;
+  state.editingId = null;
+  fullRender(); scheduleSave();
+}
+
+function addChild(parentId, text){
+  var m = getMap(); if(!m) return null;
+  pushHistory();
+  var siblings = getChildren(parentId);
+  var n = newNode(parentId, text || "", siblings.length);
+  if(parentId === "root"){ n.branchColorIndex = nextBranchColorIndex(); }
+  m.nodes[n.id] = n;
+  m.updatedAt = Date.now();
+  return n.id;
+}
+function addSibling(nodeId, text){
+  var n = getNode(nodeId);
+  if(!n || !n.parentId) return addChild(nodeId, text);
+  var m = getMap();
+  pushHistory();
+  var siblings = getChildren(n.parentId);
+  var order = n.order + 1;
+  siblings.forEach(function(s){ if(s.order > n.order) s.order += 1; });
+  var nn = newNode(n.parentId, text || "", order);
+  if(n.parentId === "root"){ nn.branchColorIndex = nextBranchColorIndex(); }
+  m.nodes[nn.id] = nn;
+  m.updatedAt = Date.now();
+  return nn.id;
+}
+function collectSubtree(id, acc){
+  acc = acc || [];
+  acc.push(id);
+  getChildren(id).forEach(function(c){ collectSubtree(c.id, acc); });
+  return acc;
+}
+function deleteNode(id){
+  if(id === "root") { toast("中心ノードは削除できません"); return; }
+  var m = getMap(); if(!m) return;
+  var ids = collectSubtree(id);
+  function doDelete(){
+    pushHistory();
+    ids.forEach(function(nid){ delete m.nodes[nid]; });
+    if(state.selectedId && ids.indexOf(state.selectedId) !== -1){
+      var parent = getNode(getNode(id) ? getNode(id).parentId : null);
+      state.selectedId = parent ? parent.id : "root";
+    }
+    if(state.editingId && ids.indexOf(state.editingId) !== -1) state.editingId = null;
+    m.updatedAt = Date.now();
+    fullRender(); scheduleSave(); closeStylePanelIfNoSel();
+  }
+  if(ids.length > 1){
+    confirmModal("ノードを削除しますか？", "「" + (getNode(id).text || "(無題)") + "」と、その下にある " + (ids.length-1) + " 件の子ノードも削除されます。", "削除する", doDelete);
+  } else {
+    doDelete();
+  }
+}
+function duplicateNode(id){
+  if(id === "root"){ toast("中心ノードは複製できません"); return; }
+  var m = getMap(); var src = getNode(id); if(!src) return;
+  pushHistory();
+  var idMap = {};
+  var ids = collectSubtree(id);
+  ids.forEach(function(oid){ idMap[oid] = uid(); });
+  var siblings = getChildren(src.parentId);
+  siblings.forEach(function(s){ if(s.order > src.order) s.order += 1; });
+  ids.forEach(function(oid){
+    var on = m.nodes[oid];
+    var nn = clone(on);
+    nn.id = idMap[oid];
+    nn.parentId = oid === id ? on.parentId : idMap[on.parentId];
+    if(oid === id) nn.order = src.order + 1;
+    m.nodes[nn.id] = nn;
+  });
+  m.updatedAt = Date.now();
+  state.selectedId = idMap[id];
+  fullRender(); scheduleSave(); openStylePanelForSelection();
+  return idMap[id];
+}
+function setManualOffset(id, dx, dy){
+  var n = getNode(id); if(!n) return;
+  n.manualOffset = {dx:dx, dy:dy};
+}
+function resetLayout(){
+  var m = getMap(); if(!m) return;
+  pushHistory();
+  Object.keys(m.nodes).forEach(function(k){ m.nodes[k].manualOffset = null; });
+  fullRender(); scheduleSave();
+  toast("レイアウトをリセットしました");
+}
+
+/* ==============================================================
+   レイアウト計算: 左から右へ流れる水平ロジックツリー方式。
+   ・深さ(x)はレベルごとに一定ではなく、親ノードの実測幅に応じて
+     詰めて配置する(短いノードの直後は間隔が詰まる)。
+   ・縦位置(y)は葉ノードを上から順に積み、親は子の中央に置く
+     tidy-tree方式。兄弟が1人しかいない鎖状の枝はy方向にまったく
+     ぶれず、ほぼ水平の一直線になる。
+   ・ドラッグで動かしたノードは manualOffset (親からの相対座標)
+     を持ち、それ以降そのオフセットが自動計算より優先される。
+     親を動かすと配下の枝ごと一緒に動く。
+   ============================================================== */
+var LEVEL_GAP = 64;   // ノード間(右端→左端)の水平の間隔
+var SIB_GAP = 22;     // 兄弟(葉)ノード間の垂直の間隔
+
+function computeLayout(){
+  var m = getMap(); if(!m) return {pos:{}, boxes:{}};
+  var boxes = {}; // id -> {w,h}
+  Object.keys(m.nodes).forEach(function(k){ boxes[k] = measureNodeBox(m.nodes[k]); });
+
+  var autoY = {}, autoX = {};
+  var cursor = 0;
+  function layoutY(id){
+    var n = m.nodes[id];
+    var kids = n.collapsed ? [] : getChildren(id);
+    if(kids.length === 0){
+      var h = boxes[id].h;
+      autoY[id] = cursor + h/2;
+      cursor += h + SIB_GAP;
+      return;
+    }
+    kids.forEach(function(c){ layoutY(c.id); });
+    var ys = kids.map(function(c){ return autoY[c.id]; });
+    autoY[id] = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
+  }
+  layoutY(m.rootId);
+
+  autoX[m.rootId] = 0;
+  function layoutX(id){
+    var n = m.nodes[id];
+    if(n.collapsed) return;
+    getChildren(id).forEach(function(c){
+      autoX[c.id] = autoX[id] + boxes[id].w/2 + LEVEL_GAP + boxes[c.id].w/2;
+      layoutX(c.id);
+    });
+  }
+  layoutX(m.rootId);
+
+  var pos = {};
+  function place(id, parentFinal){
+    var n = m.nodes[id];
+    var off = n.manualOffset;
+    var final;
+    if(id === m.rootId){
+      final = {x: off ? off.dx : 0, y: off ? off.dy : 0};
+    } else {
+      var autoDx = autoX[id] - autoX[n.parentId];
+      var autoDy = autoY[id] - autoY[n.parentId];
+      final = {
+        x: parentFinal.x + (off ? off.dx : autoDx),
+        y: parentFinal.y + (off ? off.dy : autoDy)
+      };
+    }
+    pos[id] = final;
+    if(n.collapsed) return;
+    getChildren(id).forEach(function(c){ place(c.id, final); });
+  }
+  place(m.rootId, null);
+
+  return {pos:pos, boxes:boxes};
+}
+
+/* ============================== 描画 ============================== */
+var svgEl, viewportEl, connectorsEl, nodesEl;
+function initSvgRefs(){
+  svgEl = $("#canvas-svg");
+  viewportEl = $("#viewport");
+  connectorsEl = $("#connectors");
+  nodesEl = $("#nodes");
+}
+function applyViewTransform(){
+  var v = state.view;
+  var rect = svgEl.getBoundingClientRect();
+  var cx = rect.width/2, cy = rect.height/2;
+  viewportEl.setAttribute("transform", "translate(" + (cx + v.x) + "," + (cy + v.y) + ") scale(" + v.scale + ")");
+  $("#zoomlabel").textContent = Math.round(v.scale*100) + "%";
+}
+
+function connectorPath(x1,y1,x2,y2){
+  var mx = (x1+x2)/2;
+  return "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2;
+}
+
+function fullRender(){
+  var m = getMap();
+  if(!m){ connectorsEl.innerHTML=""; nodesEl.innerHTML=""; nodeEls={}; return; }
+  var layout = computeLayout();
+  var pos = layout.pos, boxes = layout.boxes;
+
+  // connectors
+  connectorsEl.innerHTML = "";
+  Object.keys(m.nodes).forEach(function(id){
+    var n = m.nodes[id];
+    if(!n.parentId) return;
+    var parent = m.nodes[n.parentId];
+    if(!parent) return;
+    if(parent.collapsed) return;
+    var p1 = pos[parent.id], p2 = pos[id];
+    if(!p1 || !p2) return;
+    var b1 = boxes[parent.id], b2 = boxes[id];
+    var depth = nodeDepth(id);
+    var colorIdx = nodeBranchColorIndex(id);
+    var x1 = p1.x + b1.w/2;
+    var x2 = p2.x - b2.w/2;
+    var path = el("path", true);
+    path.setAttribute("class","connector");
+    path.setAttribute("d", connectorPath(x1, p1.y, x2, p2.y));
+    path.setAttribute("stroke", branchColorVar(colorIdx));
+    path.setAttribute("stroke-width", Math.max(1.6, 4.4 - depth*0.7));
+    path.setAttribute("opacity", 0.75);
+    connectorsEl.appendChild(path);
+  });
+
+  // nodes: remove stale
+  Object.keys(nodeEls).forEach(function(id){
+    if(!m.nodes[id]){ nodeEls[id].fo.remove(); delete nodeEls[id]; }
+  });
+
+  Object.keys(m.nodes).forEach(function(id){
+    var n = m.nodes[id];
+    var p = pos[id]; if(!p) { if(nodeEls[id]){nodeEls[id].fo.style.display="none";} return; }
+    var box = boxes[id];
+    var rec = nodeEls[id];
+    if(!rec){
+      rec = createNodeEl(id);
+      nodeEls[id] = rec;
+      nodesEl.appendChild(rec.fo);
+    }
+    rec.fo.style.display = "";
+    var W = box.w + 24, H = box.h + 24;
+    rec.fo.setAttribute("x", p.x - W/2);
+    rec.fo.setAttribute("y", p.y - H/2);
+    rec.fo.setAttribute("width", W);
+    rec.fo.setAttribute("height", H);
+    rec.outer.style.width = box.w + "px";
+    rec.outer.style.height = box.h + "px";
+    rec.outer.style.margin = "12px";
+    updateNodeVisual(id, n);
+  });
+
+  applyViewTransform();
+  updateUndoRedoButtons();
+  updateMapTitleUI();
+}
+function updateUndoRedoButtons(){
+  $("#btn-undo").disabled = historyStack.length === 0;
+  $("#btn-redo").disabled = redoStack.length === 0;
+}
+
+function createNodeEl(id){
+  var fo = el("foreignObject", true);
+  fo.setAttribute("class","node-fo");
+  fo.dataset.id = id;
+  var wrapper = document.createElement("div");
+  wrapper.setAttribute("xmlns","http://www.w3.org/1999/xhtml");
+  wrapper.className = "node-outer";
+  wrapper.dataset.id = id;
+
+  var card = document.createElement("div");
+  card.className = "node-card";
+  var markerEl = document.createElement("span");
+  markerEl.className = "node-marker";
+  var iconEl = document.createElement("span");
+  iconEl.className = "node-icon";
+  var textEl = document.createElement("div");
+  textEl.className = "node-text";
+  textEl.setAttribute("spellcheck","false");
+  card.appendChild(markerEl);
+  card.appendChild(iconEl);
+  card.appendChild(textEl);
+  wrapper.appendChild(card);
+
+  var collapseBtn = document.createElement("button");
+  collapseBtn.className = "node-collapse";
+  collapseBtn.style.display = "none";
+  collapseBtn.type = "button";
+  wrapper.appendChild(collapseBtn);
+
+  fo.appendChild(wrapper);
+
+  attachNodeEvents(id, wrapper, card, textEl, collapseBtn);
+
+  return {fo:fo, outer:wrapper, card:card, marker:markerEl, iconEl:iconEl, textEl:textEl, collapseBtn:collapseBtn};
+}
+
+function updateNodeVisual(id, n){
+  var rec = nodeEls[id];
+  var isRoot = id === "root";
+  var colorIdx = nodeBranchColorIndex(id);
+  var shape = n.shape || "text";
+  rec.card.dataset.shape = shape;
+  rec.card.dataset.size = n.size || "m";
+  rec.card.dataset.bold = n.bold ? "1" : "0";
+  rec.card.classList.toggle("is-root", isRoot);
+  rec.card.classList.toggle("is-selected", state.selectedId === id);
+  var custom = n.color;
+  var branchColor = branchColorVar(colorIdx);
+  var accentColor = custom || branchColor;
+  if(isRoot){
+    rec.card.style.borderColor = "";
+    rec.card.style.removeProperty("--border-color");
+    rec.card.style.removeProperty("--sel-ring");
+    rec.marker.style.display = "none";
+  } else {
+    rec.card.style.borderColor = accentColor;
+    rec.card.style.setProperty("--border-color", accentColor);
+    rec.card.style.setProperty("--sel-ring", accentColor);
+    rec.marker.style.display = shape === "text" ? "" : "none";
+    rec.marker.style.borderColor = accentColor;
+  }
+  rec.card.style.color = "";
+  rec.iconEl.textContent = n.icon || "";
+  rec.iconEl.style.display = n.icon ? "" : "none";
+  if(state.editingId !== id){
+    if(rec.textEl.textContent !== n.text) rec.textEl.textContent = n.text;
+    rec.textEl.setAttribute("contenteditable","false");
+  } else {
+    rec.textEl.setAttribute("contenteditable","true");
+  }
+  var kids = getChildren(id);
+  if(kids.length > 0){
+    rec.collapseBtn.style.display = "flex";
+    rec.collapseBtn.textContent = n.collapsed ? "+" + kids.length : "−";
+    rec.collapseBtn.title = n.collapsed ? "展開" : "折りたたむ";
+  } else {
+    rec.collapseBtn.style.display = "none";
+  }
+}
+
+/* ============================== ノードごとのイベント ============================== */
+var dragState = null; // {id, startClientX, startClientY, startOffset, moved}
+var panState = null;
+
+function toWorld(clientX, clientY){
+  var rect = svgEl.getBoundingClientRect();
+  var v = state.view;
+  var cx = rect.width/2, cy = rect.height/2;
+  return { x: (clientX - rect.left - cx - v.x) / v.scale, y: (clientY - rect.top - cy - v.y) / v.scale };
+}
+
+function attachNodeEvents(id, wrapper, card, textEl, collapseBtn){
+  card.addEventListener("mousedown", function(e){
+    if(e.button !== 0) return;
+    if(e.target === textEl && state.editingId === id) return;
+    e.stopPropagation();
+    selectNode(id);
+    dragState = { id:id, startX:e.clientX, startY:e.clientY, moved:false,
+      origin: getNode(id).manualOffset ? {dx:getNode(id).manualOffset.dx, dy:getNode(id).manualOffset.dy} : {dx:null, dy:null} };
+    document.addEventListener("mousemove", onNodeDragMove);
+    document.addEventListener("mouseup", onNodeDragUp);
+  });
+  card.addEventListener("dblclick", function(e){
+    e.stopPropagation();
+    startEditing(id);
+  });
+  collapseBtn.addEventListener("mousedown", function(e){ e.stopPropagation(); });
+  collapseBtn.addEventListener("click", function(e){
+    e.stopPropagation();
+    var n = getNode(id); if(!n) return;
+    pushHistory();
+    n.collapsed = !n.collapsed;
+    fullRender(); scheduleSave();
+  });
+  textEl.addEventListener("keydown", function(e){
+    if(e.isComposing || e.keyCode === 229) return;
+    if(e.key === "Enter" && e.shiftKey){
+      e.preventDefault();
+      insertLineBreakAtCaret(textEl);
+      var n0 = getNode(id); if(n0){ n0.text = textEl.textContent; relayoutSoft(); }
+    } else if(e.key === "Enter"){
+      e.preventDefault();
+      commitEdit(id);
+      if(id === "root"){ var cid = addChild(id, ""); fullRender(); startEditing(cid); }
+      else { var sid = addSibling(id, ""); fullRender(); startEditing(sid); }
+    } else if(e.key === "Tab"){
+      e.preventDefault();
+      commitEdit(id);
+      var cid2 = addChild(id, "");
+      var n = getNode(id); n.collapsed = false;
+      fullRender(); startEditing(cid2);
+    } else if(e.key === "Escape"){
+      e.preventDefault();
+      cancelEdit(id);
+    }
+  });
+  textEl.addEventListener("blur", function(){
+    if(state.editingId === id) commitEdit(id);
+  });
+  textEl.addEventListener("input", function(){
+    var n = getNode(id); if(!n) return;
+    n.text = textEl.textContent;
+    relayoutSoft();
+  });
+}
+
+/* Shift+Enter でキャレット位置に改行(テキストノード)を挿入する。
+   ブラウザ標準のEnter挿入(<div>や<br>)に頼らず、常に textContent が
+   素直な "\n" を持つようにして、折り返し計算(measureNodeBox)と
+   表示(white-space:pre-wrap)を一致させる。 */
+function insertLineBreakAtCaret(el){
+  var sel = window.getSelection();
+  if(!sel.rangeCount) return;
+  var range = sel.getRangeAt(0);
+  range.deleteContents();
+  var br = document.createTextNode("\n");
+  range.insertNode(br);
+  range.setStartAfter(br);
+  range.setEndAfter(br);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+var relayoutRaf = null;
+function relayoutSoft(){
+  if(relayoutRaf) return;
+  relayoutRaf = requestAnimationFrame(function(){ relayoutRaf = null; fullRender(); });
+}
+
+function onNodeDragMove(e){
+  if(!dragState) return;
+  var dxPix = e.clientX - dragState.startX, dyPix = e.clientY - dragState.startY;
+  if(Math.abs(dxPix) < 4 && Math.abs(dyPix) < 4 && !dragState.moved) return;
+  var firstMove = !dragState.moved;
+  dragState.moved = true;
+  if(firstMove) pushHistory();
+  document.getElementById("canvas-wrap").classList.add("node-dragging");
+  var v = state.view;
+  var dx = dxPix / v.scale, dy = dyPix / v.scale;
+  var n = getNode(dragState.id); if(!n) return;
+  if(n.parentId === null){
+    var base = dragState.origin.dx != null ? dragState.origin : {dx:0,dy:0};
+    n.manualOffset = {dx:(base.dx||0)+dx, dy:(base.dy||0)+dy};
+  } else {
+    if(dragState.origin.dx != null){
+      n.manualOffset = {dx: dragState.origin.dx + dx, dy: dragState.origin.dy + dy};
+    } else {
+      // compute current auto offset baseline once
+      if(!dragState._autoBase){
+        var layout = computeLayout();
+        var p = layout.pos[n.id], pp = layout.pos[n.parentId];
+        dragState._autoBase = p && pp ? {dx:p.x-pp.x, dy:p.y-pp.y} : {dx:0,dy:0};
+      }
+      n.manualOffset = {dx: dragState._autoBase.dx + dx, dy: dragState._autoBase.dy + dy};
+    }
+  }
+  fullRender();
+}
+function onNodeDragUp(){
+  document.removeEventListener("mousemove", onNodeDragMove);
+  document.removeEventListener("mouseup", onNodeDragUp);
+  document.getElementById("canvas-wrap").classList.remove("node-dragging");
+  if(dragState && dragState.moved){ scheduleSave(); }
+  dragState = null;
+}
+
+/* ============================== 編集 ============================== */
+var editOriginalText = "";
+function startEditing(id){
+  var n = getNode(id); if(!n) return;
+  if(state.editingId && state.editingId !== id) commitEdit(state.editingId);
+  state.editingId = id;
+  editOriginalText = n.text;
+  selectNode(id, true);
+  fullRender();
+  var rec = nodeEls[id];
+  if(rec){
+    rec.textEl.setAttribute("contenteditable","true");
+    rec.textEl.focus();
+    var range = document.createRange();
+    range.selectNodeContents(rec.textEl);
+    var sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(range);
+  }
+}
+function commitEdit(id){
+  var n = getNode(id); if(!n) return;
+  var rec = nodeEls[id];
+  if(rec) n.text = rec.textEl.textContent.trim();
+  if(!n.text) n.text = (id === "root") ? "無題のマップ" : "無題";
+  state.editingId = null;
+  fullRender(); scheduleSave();
+}
+function cancelEdit(id){
+  var n = getNode(id); if(!n) return;
+  n.text = editOriginalText;
+  state.editingId = null;
+  fullRender();
+}
+
+/* ============================== 選択 / スタイルパネル ============================== */
+function selectNode(id, keepPanelClosed){
+  state.selectedId = id;
+  fullRender();
+  if(!keepPanelClosed) openStylePanelForSelection();
+  else refreshStylePanel();
+}
+function deselect(){
+  if(state.editingId) commitEdit(state.editingId);
+  state.selectedId = null;
+  closeStylePanelIfNoSel();
+  fullRender();
+}
+function closeStylePanelIfNoSel(){
+  $("#stylepanel").classList.remove("open");
+}
+function openStylePanelForSelection(){
+  if(!state.selectedId) return;
+  $("#stylepanel").classList.add("open");
+  refreshStylePanel();
+}
+function buildStylePanelStatic(){
+  var colorrow = $("#colorrow");
+  colorrow.innerHTML = "";
+  for(var i=0;i<BRANCH_COUNT;i++){
+    var sw = document.createElement("div");
+    sw.className = "swatch";
+    sw.dataset.idx = i;
+    sw.style.background = "var(--branch-" + i + ")";
+    sw.addEventListener("click", function(){
+      applyStyleChange({color:null, branchColorIndex: parseInt(this.dataset.idx,10)});
+    });
+    colorrow.appendChild(sw);
+  }
+  var custom = document.createElement("div");
+  custom.className = "swatch custom";
+  var inp = document.createElement("input");
+  inp.type = "color"; inp.value = "#888888";
+  inp.addEventListener("input", function(){ applyStyleChange({color:inp.value}); });
+  custom.appendChild(inp);
+  colorrow.appendChild(custom);
+
+  ["boldseg","sizeseg","shapeseg"].forEach(function(segId){
+    document.getElementById(segId).querySelectorAll("button").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var v = btn.dataset.v;
+        if(segId === "boldseg") applyStyleChange({bold: v==="1"});
+        if(segId === "sizeseg") applyStyleChange({size: v});
+        if(segId === "shapeseg") applyStyleChange({shape: v});
+      });
+    });
+  });
+
+  var emojirow = $("#emojirow");
+  EMOJI_SET.forEach(function(em){
+    var b = document.createElement("button");
+    b.type="button"; b.textContent = em;
+    b.addEventListener("click", function(){
+      var n = getNode(state.selectedId);
+      applyStyleChange({icon: n.icon === em ? "" : em});
+    });
+    emojirow.appendChild(b);
+  });
+
+  $("#btn-duplicate").addEventListener("click", function(){ if(state.selectedId) duplicateNode(state.selectedId); });
+  $("#btn-delete").addEventListener("click", function(){ if(state.selectedId) deleteNode(state.selectedId); });
+}
+function applyStyleChange(patch){
+  var n = getNode(state.selectedId); if(!n) return;
+  pushHistory();
+  Object.keys(patch).forEach(function(k){ n[k] = patch[k]; });
+  fullRender(); scheduleSave(); refreshStylePanel();
+}
+function refreshStylePanel(){
+  var n = getNode(state.selectedId);
+  if(!n){ closeStylePanelIfNoSel(); return; }
+  var isRoot = n.id === "root";
+  $("#stylepanel").style.opacity = isRoot ? .55 : 1;
+  $("#stylepanel").style.pointerEvents = isRoot ? "none" : "auto";
+  var colorIdx = nodeBranchColorIndex(n.id);
+  $("#colorrow").querySelectorAll(".swatch").forEach(function(sw, i){
+    if(sw.classList.contains("custom")) return;
+    sw.classList.toggle("sel", !n.color && colorIdx === i);
+  });
+  document.querySelectorAll("#boldseg button").forEach(function(b){ b.classList.toggle("on", (b.dataset.v==="1") === !!n.bold); });
+  document.querySelectorAll("#sizeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.v === (n.size||"m")); });
+  document.querySelectorAll("#shapeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.v === (n.shape||"text")); });
+  document.querySelectorAll("#emojirow button").forEach(function(b){ b.classList.toggle("on", b.textContent === n.icon); });
+  $("#btn-delete").style.display = isRoot ? "none" : "";
+  $("#btn-duplicate").style.display = isRoot ? "none" : "";
+}
+
+/* ============================== ズーム / パン ============================== */
+function setZoom(newScale, clientX, clientY){
+  var v = state.view;
+  var rect = svgEl.getBoundingClientRect();
+  var cx = rect.width/2, cy = rect.height/2;
+  var px = clientX != null ? clientX - rect.left : rect.width/2;
+  var py = clientY != null ? clientY - rect.top : rect.height/2;
+  var worldX = (px - cx - v.x) / v.scale;
+  var worldY = (py - cy - v.y) / v.scale;
+  newScale = clamp(newScale, 0.25, 2.5);
+  v.x = px - cx - worldX*newScale;
+  v.y = py - cy - worldY*newScale;
+  v.scale = newScale;
+  applyViewTransform();
+}
+function fitToScreen(){
+  var m = getMap(); if(!m) return;
+  var layout = computeLayout();
+  var xs=[], ys=[];
+  Object.keys(layout.pos).forEach(function(id){
+    var p = layout.pos[id], b = layout.boxes[id];
+    xs.push(p.x-b.w/2, p.x+b.w/2); ys.push(p.y-b.h/2, p.y+b.h/2);
+  });
+  if(xs.length===0) return;
+  var minX=Math.min.apply(null,xs), maxX=Math.max.apply(null,xs);
+  var minY=Math.min.apply(null,ys), maxY=Math.max.apply(null,ys);
+  var rect = svgEl.getBoundingClientRect();
+  var w = maxX-minX || 200, h = maxY-minY || 200;
+  var scale = clamp(Math.min((rect.width-100)/w, (rect.height-100)/h), 0.25, 1.4);
+  var midX = (minX+maxX)/2, midY = (minY+maxY)/2;
+  state.view.scale = scale;
+  state.view.x = -midX*scale;
+  state.view.y = -midY*scale;
+  applyViewTransform();
+}
+
+function bindCanvasEvents(){
+  var wrap = document.getElementById("canvas-wrap");
+  wrap.addEventListener("mousedown", function(e){
+    if(e.button !== 0) return;
+    if(e.target.closest(".node-card") || e.target.closest(".node-collapse")) return;
+    if(state.editingId) commitEdit(state.editingId);
+    state.selectedId = null; closeStylePanelIfNoSel(); fullRender();
+    panState = {startX:e.clientX, startY:e.clientY, ox:state.view.x, oy:state.view.y};
+    wrap.classList.add("panning");
+    document.addEventListener("mousemove", onPanMove);
+    document.addEventListener("mouseup", onPanUp);
+  });
+  wrap.addEventListener("wheel", function(e){
+    e.preventDefault();
+    if(e.ctrlKey || e.metaKey){
+      var factor = Math.exp(-e.deltaY * 0.01);
+      setZoom(state.view.scale * factor, e.clientX, e.clientY);
+    } else {
+      state.view.x -= e.deltaX;
+      state.view.y -= e.deltaY;
+      applyViewTransform();
+    }
+  }, {passive:false});
+  window.addEventListener("resize", applyViewTransform);
+}
+function onPanMove(e){
+  if(!panState) return;
+  state.view.x = panState.ox + (e.clientX - panState.startX);
+  state.view.y = panState.oy + (e.clientY - panState.startY);
+  applyViewTransform();
+}
+function onPanUp(){
+  panState = null;
+  document.getElementById("canvas-wrap").classList.remove("panning");
+  document.removeEventListener("mousemove", onPanMove);
+  document.removeEventListener("mouseup", onPanUp);
+}
+
+/* ============================== キーボード ============================== */
+function bindKeyboard(){
+  window.addEventListener("keydown", function(e){
+    if(state.editingId) return; // handled by node's own listener, or lets typing through
+    var tag = document.activeElement ? document.activeElement.tagName : "";
+    if(tag === "INPUT" || tag === "TEXTAREA") return;
+    var mod = e.ctrlKey || e.metaKey;
+    if(mod && e.key.toLowerCase() === "z"){
+      e.preventDefault();
+      if(e.shiftKey) redo(); else undo();
+      return;
+    }
+    if(mod && e.key.toLowerCase() === "d"){
+      e.preventDefault();
+      if(state.selectedId) duplicateNode(state.selectedId);
+      return;
+    }
+    if(e.key === "+" || e.key === "="){ e.preventDefault(); setZoom(state.view.scale*1.15); return; }
+    if(e.key === "-" || e.key === "_"){ e.preventDefault(); setZoom(state.view.scale/1.15); return; }
+    if(e.key === "0"){ e.preventDefault(); fitToScreen(); return; }
+    if(!state.selectedId){
+      if(e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight"){
+        e.preventDefault(); selectNode("root", true);
+      }
+      return;
+    }
+    if(e.key === "Enter"){
+      e.preventDefault();
+      if(state.selectedId === "root"){ var cid=addChild("root",""); fullRender(); startEditing(cid); }
+      else { var sid = addSibling(state.selectedId, ""); fullRender(); startEditing(sid); }
+    } else if(e.key === "Tab"){
+      e.preventDefault();
+      var cid2 = addChild(state.selectedId, "");
+      getNode(state.selectedId).collapsed = false;
+      fullRender(); startEditing(cid2);
+    } else if(e.key === "F2"){
+      e.preventDefault(); startEditing(state.selectedId);
+    } else if(e.key === "Delete" || e.key === "Backspace"){
+      e.preventDefault(); deleteNode(state.selectedId);
+    } else if(e.key === "Escape"){
+      deselect();
+    } else if(e.key === "ArrowUp" || e.key === "ArrowDown"){
+      e.preventDefault();
+      var n = getNode(state.selectedId);
+      if(n && n.parentId){
+        var sibs = getChildren(n.parentId);
+        var idx = sibs.findIndex(function(s){return s.id===n.id;});
+        var ni = e.key==="ArrowUp" ? idx-1 : idx+1;
+        if(ni>=0 && ni<sibs.length) selectNode(sibs[ni].id);
+      }
+    } else if(e.key === "ArrowLeft"){
+      e.preventDefault();
+      var n2 = getNode(state.selectedId);
+      if(n2 && n2.parentId) selectNode(n2.parentId);
+    } else if(e.key === "ArrowRight"){
+      e.preventDefault();
+      var n3 = getNode(state.selectedId);
+      var kids = getChildren(n3.id);
+      if(n3.collapsed){ n3.collapsed=false; fullRender(); }
+      else if(kids.length) selectNode(kids[0].id);
+    }
+  });
+}
+
+/* ============================== マップ切替UI ============================== */
+function updateMapTitleUI(){
+  var m = getMap();
+  $("#maptitle-text").textContent = m ? m.title : "マップ";
+}
+function renderMapsDrawer(){
+  var d = $("#mapsdrawer");
+  d.innerHTML = "";
+  var ids = Object.keys(state.maps).sort(function(a,b){ return (state.maps[b].updatedAt||0) - (state.maps[a].updatedAt||0); });
+  ids.forEach(function(id){
+    var m = state.maps[id];
+    var row = document.createElement("div");
+    row.className = "row" + (id===state.currentMapId ? " current" : "");
+    var ttl = document.createElement("div"); ttl.className="ttl"; ttl.textContent = m.title;
+    var meta = document.createElement("div"); meta.className="meta"; meta.textContent = "";
+    var del = document.createElement("div"); del.className="del"; del.textContent="✕";
+    row.appendChild(ttl); row.appendChild(meta); row.appendChild(del);
+    row.addEventListener("click", function(e){
+      if(e.target === del) return;
+      switchMap(id);
+      d.classList.remove("open");
+    });
+    del.addEventListener("click", function(e){
+      e.stopPropagation();
+      if(ids.length <= 1){ toast("最後のマップは削除できません"); return; }
+      confirmModal("マップを削除しますか？", "「" + m.title + "」を完全に削除します。この操作は取り消せません。", "削除する", function(){
+        delete state.maps[id];
+        if(state.currentMapId === id){
+          var remain = Object.keys(state.maps);
+          switchMap(remain[0]);
+        }
+        renderMapsDrawer(); scheduleSave();
+      });
+    });
+    d.appendChild(row);
+  });
+  var divider = document.createElement("div"); divider.className="divider"; d.appendChild(divider);
+  var nm = document.createElement("div"); nm.className="newmap"; nm.textContent="＋ 新しいマップ";
+  nm.addEventListener("click", function(){
+    var id = createMap("新しいマインドマップ", false);
+    switchMap(id);
+    d.classList.remove("open");
+  });
+  d.appendChild(nm);
+}
+function switchMap(id){
+  if(!state.maps[id]) return;
+  state.currentMapId = id;
+  state.selectedId = null; state.editingId = null;
+  historyStack.length = 0; redoStack.length = 0;
+  nodeEls = {}; nodesEl.innerHTML=""; connectorsEl.innerHTML="";
+  state.view = {x:0,y:0,scale:1};
+  closeStylePanelIfNoSel();
+  fullRender(); scheduleSave();
+  fitToScreen();
+}
+
+/* ============================== モーダル / 確認 ============================== */
+function confirmModal(title, body, okLabel, onOk){
+  var box = $("#modalbox");
+  box.innerHTML = "";
+  var h = document.createElement("h3"); h.textContent = title;
+  var p = document.createElement("p"); p.textContent = body;
+  var row = document.createElement("div"); row.className="actrow";
+  var cancel = document.createElement("button"); cancel.className="btn ghost"; cancel.textContent="キャンセル";
+  var ok = document.createElement("button"); ok.className="btn danger"; ok.textContent=okLabel;
+  row.appendChild(cancel); row.appendChild(ok);
+  box.appendChild(h); box.appendChild(p); box.appendChild(row);
+  $("#modalveil").classList.add("open");
+  function close(){ $("#modalveil").classList.remove("open"); }
+  cancel.addEventListener("click", close);
+  ok.addEventListener("click", function(){ close(); onOk(); });
+}
+function infoModal(title, bodyNode, closeLabel){
+  var box = $("#modalbox");
+  box.innerHTML = "";
+  var h = document.createElement("h3"); h.textContent = title;
+  box.appendChild(h);
+  box.appendChild(bodyNode);
+  var row = document.createElement("div"); row.className="actrow";
+  var ok = document.createElement("button"); ok.className="btn primary"; ok.textContent=closeLabel||"閉じる"; ok.style.flex="1";
+  row.appendChild(ok);
+  box.appendChild(row);
+  $("#modalveil").classList.add("open");
+  ok.addEventListener("click", function(){ $("#modalveil").classList.remove("open"); });
+}
+$("#modalveil") && document.addEventListener("click", function(e){
+  if(e.target.id === "modalveil") $("#modalveil").classList.remove("open");
+});
+
+/* ============================== エクスポート / インポート ============================== */
+function exportJSON(){
+  var m = getMap(); if(!m) return;
+  var data = JSON.stringify(m, null, 2);
+  triggerDownload(m.title.replace(/[\\/:*?"<>|]/g,"") + ".json", data, "application/json");
+}
+function triggerDownload(filename, data, mime){
+  if(downloadsApi){
+    downloadsApi.save({filename:filename, data:data}).then(function(){
+      toast("保存しました: " + filename);
+    }).catch(function(err){
+      fallbackDownload(filename, data, mime);
+    });
+  } else {
+    fallbackDownload(filename, data, mime);
+  }
+}
+function fallbackDownload(filename, data, mime){
+  try{
+    var blob = new Blob([data], {type: mime||"application/octet-stream"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+  }catch(e){ toast("書き出しに失敗しました"); }
+}
+function embeddedExportCss(){
+  var cssText = "";
+  var styleTag = document.querySelector("style");
+  if(styleTag) cssText += styleTag.textContent;
+  var vars = ["--bg","--surface","--surface-2","--ink","--ink-soft","--border",
+    "--accent","--accent-soft","--accent-ink","--shadow-sm","--shadow-md",
+    "--branch-0","--branch-1","--branch-2","--branch-3","--branch-4","--branch-5","--branch-6","--branch-7"];
+  var cs = getComputedStyle(document.documentElement);
+  /* :not(#__never__) inflates specificity so this always beats the
+     copied [data-theme]/media-query rules, regardless of the exporting
+     browser's own OS color-scheme preference. */
+  var overrides = ":root:not(#__mindloom_never_match__){";
+  vars.forEach(function(v){ overrides += v + ":" + cs.getPropertyValue(v) + ";"; });
+  overrides += "}";
+  return cssText + "\n" + overrides;
+}
+function exportPNG(){
+  var m = getMap(); if(!m) return;
+  try{
+    var clone2 = svgEl.cloneNode(true);
+    var styleEl = document.createElementNS("http://www.w3.org/2000/svg","style");
+    styleEl.textContent = embeddedExportCss();
+    clone2.insertBefore(styleEl, clone2.firstChild);
+    var rect = svgEl.getBoundingClientRect();
+    var layout = computeLayout();
+    var xs=[], ys=[];
+    Object.keys(layout.pos).forEach(function(id){
+      var p = layout.pos[id], b = layout.boxes[id];
+      xs.push(p.x-b.w/2-20, p.x+b.w/2+20); ys.push(p.y-b.h/2-20, p.y+b.h/2+20);
+    });
+    var minX=Math.min.apply(null,xs), maxX=Math.max.apply(null,xs);
+    var minY=Math.min.apply(null,ys), maxY=Math.max.apply(null,ys);
+    var w = maxX-minX, h = maxY-minY;
+    var vp = clone2.querySelector("#viewport");
+    vp.setAttribute("transform", "translate(" + (-minX) + "," + (-minY) + ")");
+    clone2.setAttribute("width", w); clone2.setAttribute("height", h);
+    clone2.setAttribute("viewBox", "0 0 " + w + " " + h);
+    var bgColor = getComputedStyle(svgEl).backgroundColor;
+    clone2.style.backgroundColor = bgColor;
+    clone2.querySelectorAll(".node-text[contenteditable]").forEach(function(t){ t.removeAttribute("contenteditable"); });
+    clone2.querySelectorAll(".node-card.is-selected").forEach(function(t){ t.classList.remove("is-selected"); });
+    clone2.querySelectorAll(".node-collapse").forEach(function(t){ t.remove(); });
+    var xml = new XMLSerializer().serializeToString(clone2);
+    var svgBlob = new Blob([xml], {type:"image/svg+xml;charset=utf-8"});
+    var url = URL.createObjectURL(svgBlob);
+    var img = new Image();
+    img.onload = function(){
+      var scaleFactor = 2;
+      var canvas = document.createElement("canvas");
+      canvas.width = w*scaleFactor; canvas.height = h*scaleFactor;
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = bgColor || "#ffffff";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.scale(scaleFactor, scaleFactor);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function(blob){
+        if(!blob){ toast("PNG書き出しに失敗しました"); return; }
+        triggerDownload(m.title.replace(/[\\/:*?"<>|]/g,"") + ".png", blob, "image/png");
+      }, "image/png");
+    };
+    img.onerror = function(){ toast("PNG書き出しに失敗しました。JSON書き出しをお試しください"); };
+    img.src = url;
+  }catch(e){ toast("PNG書き出しに失敗しました"); }
+}
+function importJSONFile(file){
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var data = JSON.parse(reader.result);
+      if(!data.nodes || !data.rootId) throw new Error("invalid");
+      var id = uid();
+      data.id = id; data.updatedAt = Date.now();
+      state.maps[id] = data;
+      switchMap(id);
+      renderMapsDrawer();
+      toast("読み込みました: " + (data.title||"マップ"));
+    }catch(e){ toast("読み込みに失敗しました。ファイル形式をご確認ください"); }
+  };
+  reader.readAsText(file);
+}
+
+/* ==============================================================
+   共有: サーバーもアカウントも使わず、マップのデータをリンクの
+   中に丸ごと埋め込む方式。誰でも(組織や登録の有無に関係なく)
+   リンクを開けば同じマップのコピーを取得できる。
+   ============================================================== */
+function encodeMapForUrl(m){
+  var payload = {title:m.title, rootId:m.rootId, nodes:m.nodes};
+  var json = JSON.stringify(payload);
+  var b64 = btoa(unescape(encodeURIComponent(json)));
+  return b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function decodeMapFromUrl(str){
+  var b64 = str.replace(/-/g,"+").replace(/_/g,"/");
+  while(b64.length % 4) b64 += "=";
+  var json = decodeURIComponent(escape(atob(b64)));
+  return JSON.parse(json);
+}
+function openShareModal(){
+  var m = getMap(); if(!m) return;
+  var url = location.origin + location.pathname + "?m=" + encodeMapForUrl(m);
+  var wrap = document.createElement("div");
+  var p = document.createElement("p");
+  if(url.length > 7000){
+    p.textContent = "このマップは情報量が多く、リンクがかなり長くなります。うまく開けない場合は下の「JSONで書き出す」を使ってファイルで送ってください。";
+  } else {
+    p.textContent = "このリンクを開くと、誰でも(組織や登録の有無に関わらず)このマップのコピーを自分のMindloomに取り込めます。相手側の編集はあなたのマップには反映されません。";
+  }
+  var row = document.createElement("div"); row.className = "linkrow";
+  var inp = document.createElement("input"); inp.type="text"; inp.readOnly=true; inp.value = url;
+  var copyBtn = document.createElement("button"); copyBtn.className="btn primary"; copyBtn.textContent="コピー"; copyBtn.style.flex="0 0 auto";
+  copyBtn.addEventListener("click", function(){
+    navigator.clipboard.writeText(url).then(function(){ toast("リンクをコピーしました"); }).catch(function(){ inp.select(); });
+  });
+  row.appendChild(inp); row.appendChild(copyBtn);
+  var row2 = document.createElement("div"); row2.className = "actrow";
+  var jsonBtn = document.createElement("button"); jsonBtn.className="btn ghost"; jsonBtn.textContent="JSONで書き出す";
+  jsonBtn.addEventListener("click", exportJSON);
+  row2.appendChild(jsonBtn);
+  wrap.appendChild(p); wrap.appendChild(row); wrap.appendChild(row2);
+  infoModal("マップを共有", wrap, "閉じる");
+}
+
+/* ============================== テーマ ============================== */
+function applyTheme(){
+  var t = state.theme;
+  if(t === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  var icon = t === "light" ? "☀" : (t === "dark" ? "☾" : "◐");
+  $("#btn-theme").textContent = icon;
+}
+function cycleTheme(){
+  state.theme = state.theme === "system" ? "light" : (state.theme === "light" ? "dark" : "system");
+  try{ localStorage.setItem("mindloom.theme", state.theme); }catch(e){}
+  applyTheme();
+}
+
+/* ============================== ツールバー配線 ============================== */
+function bindToolbar(){
+  $("#btn-undo").addEventListener("click", undo);
+  $("#btn-redo").addEventListener("click", redo);
+  $("#btn-zoomin").addEventListener("click", function(){ setZoom(state.view.scale*1.2); });
+  $("#btn-zoomout").addEventListener("click", function(){ setZoom(state.view.scale/1.2); });
+  $("#btn-fit").addEventListener("click", fitToScreen);
+  $("#btn-theme").addEventListener("click", cycleTheme);
+  $("#btn-export").addEventListener("click", function(e){
+    e.stopPropagation();
+    openExportMenu();
+  });
+  $("#btn-import").addEventListener("click", function(){ $("#filepicker").click(); });
+  $("#filepicker").addEventListener("change", function(e){
+    if(e.target.files && e.target.files[0]) importJSONFile(e.target.files[0]);
+    e.target.value = "";
+  });
+  $("#btn-share").addEventListener("click", openShareModal);
+  $("#btn-newmap").addEventListener("click", function(){
+    var id = createMap("新しいマインドマップ", false);
+    switchMap(id);
+  });
+  $("#maptitle-btn").addEventListener("click", function(e){
+    e.stopPropagation();
+    var d = $("#mapsdrawer");
+    if(d.classList.contains("open")){ d.classList.remove("open"); return; }
+    renderMapsDrawer();
+    d.classList.add("open");
+  });
+  $("#btn-help").addEventListener("click", function(e){
+    e.stopPropagation();
+    $("#shortcuts").classList.toggle("open");
+  });
+  document.addEventListener("click", function(e){
+    if(!e.target.closest("#mapsdrawer") && !e.target.closest("#maptitle-btn")) $("#mapsdrawer").classList.remove("open");
+    if(!e.target.closest("#shortcuts") && !e.target.closest("#btn-help")) $("#shortcuts").classList.remove("open");
+    if(!e.target.closest("#stylepanel") && !e.target.closest(".node-card") && !e.target.closest(".node-collapse")){
+      // keep panel open while a node stays selected; only closes via deselect elsewhere
+    }
+  });
+}
+function openExportMenu(){
+  var wrap = document.createElement("div");
+  var p = document.createElement("p"); p.textContent = "書き出し形式を選んでください。";
+  var row = document.createElement("div"); row.className="actrow";
+  var pngBtn = document.createElement("button"); pngBtn.className="btn primary"; pngBtn.textContent="PNG画像";
+  var jsonBtn = document.createElement("button"); jsonBtn.className="btn ghost"; jsonBtn.textContent="JSONファイル";
+  row.appendChild(pngBtn); row.appendChild(jsonBtn);
+  wrap.appendChild(p); wrap.appendChild(row);
+  infoModal("マップを書き出す", wrap, "キャンセル");
+  pngBtn.addEventListener("click", function(){ $("#modalveil").classList.remove("open"); exportPNG(); });
+  jsonBtn.addEventListener("click", function(){ $("#modalveil").classList.remove("open"); exportJSON(); });
+}
+
+/* ============================== 初期化 ============================== */
+function init(){
+  initSvgRefs();
+  loadPersisted();
+  try{ var t = localStorage.getItem("mindloom.theme"); if(t) state.theme = t; }catch(e){}
+  applyTheme();
+
+  if(Object.keys(state.maps).length === 0){
+    var id = createMap("旅行の計画", true);
+    state.currentMapId = id;
+  } else if(!state.currentMapId || !state.maps[state.currentMapId]){
+    state.currentMapId = Object.keys(state.maps)[0];
+  }
+
+  buildStylePanelStatic();
+  bindCanvasEvents();
+  bindKeyboard();
+  bindToolbar();
+
+  fullRender();
+  requestAnimationFrame(fitToScreen);
+
+  if(window.claude && window.claude.use){
+    window.claude.use("downloads").then(function(api){ downloadsApi = api; }).catch(function(){});
+  }
+
+  var params = new URLSearchParams(location.search);
+  var sharedPayload = params.get("m");
+  if(sharedPayload){
+    try{
+      var data = decodeMapFromUrl(sharedPayload);
+      if(!data.nodes || !data.rootId) throw new Error("invalid");
+      var id = uid();
+      var m = {id:id, title:data.title||"共有マップ", rootId:data.rootId, nodes:data.nodes, createdAt:Date.now(), updatedAt:Date.now()};
+      state.maps[id] = m;
+      switchMap(id);
+      // URL からリンク文字列を消しておく(ブックマーク/リロード時の混乱防止)
+      history.replaceState(null, "", location.origin + location.pathname);
+      toast("共有されたマップを取り込みました");
+    }catch(e){
+      toast("共有リンクの読み込みに失敗しました");
+    }
+  }
+}
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+else init();
+
+})();
+</script>
