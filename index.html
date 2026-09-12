@@ -1613,6 +1613,16 @@ function buildStylePanelStatic(){
   autoBg.title = "自動(初期値の背景色に戻す)";
   autoBg.addEventListener("click", function(){ applyStyleChange({bgColor:null}); });
   bgcolorrow.appendChild(autoBg);
+  for(var bi=0; bi<BRANCH_COUNT; bi++){
+    var bsw = document.createElement("div");
+    bsw.className = "swatch";
+    bsw.dataset.bg = "var(--branch-" + bi + ")";
+    bsw.style.background = "var(--branch-" + bi + ")";
+    bsw.addEventListener("click", (function(v){
+      return function(){ applyStyleChange({bgColor: v}); };
+    })(bsw.dataset.bg));
+    bgcolorrow.appendChild(bsw);
+  }
   var customBg = document.createElement("div");
   customBg.className = "swatch custom";
   var inpBg = document.createElement("input");
@@ -1670,7 +1680,8 @@ function refreshStylePanel(){
   });
   $("#bgcolorrow").querySelectorAll(".swatch").forEach(function(sw){
     if(sw.classList.contains("custom")) return;
-    sw.classList.toggle("sel", !n.bgColor);
+    if(sw.classList.contains("auto")){ sw.classList.toggle("sel", !n.bgColor); return; }
+    sw.classList.toggle("sel", !!n.bgColor && n.bgColor === sw.dataset.bg);
   });
   var isTextShape = (n.shape||"text") === "text";
   $("#bgcolorblock").style.opacity = isTextShape ? .4 : 1;
