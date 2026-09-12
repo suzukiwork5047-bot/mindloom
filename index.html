@@ -223,6 +223,20 @@
 
   ::selection{background:var(--accent-soft);}
   input:focus-visible, button:focus-visible, [contenteditable]:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+  /* ---------- 関連線 (ノード同士の自由な結び付け) ---------- */
+  #canvas-wrap.connect-mode .node-card{cursor:crosshair;}
+  .relation-hit{fill:none; stroke:transparent; stroke-width:16; cursor:pointer;}
+  .relation-path{fill:none; stroke-width:2; stroke-dasharray:7 5; stroke-linecap:round; opacity:.85; pointer-events:none;}
+  .relation-path.is-selected{stroke-width:3; stroke-dasharray:none; opacity:1;}
+  .relation-arrowhead{opacity:.9; pointer-events:none;}
+  .relation-arrowhead.is-selected{opacity:1;}
+  .relation-label-text{font-family:var(--font-body); font-size:11.5px; font-weight:600; fill:var(--ink); pointer-events:none;}
+  .relation-label-bg{fill:var(--surface); stroke:var(--border); stroke-width:1; pointer-events:none;}
+  .relation-drag-preview{fill:none; stroke:var(--accent); stroke-width:2; stroke-dasharray:5 5; pointer-events:none;}
+  #relationbox .swrow{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px;}
+  #relationbox label{font-size:11px; color:var(--ink-soft); display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
+  #relationbox input[type=text]{width:100%; box-sizing:border-box; padding:9px 11px; border-radius:9px; border:1.4px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13.5px; margin-bottom:16px; font-family:var(--font-body);}
 </style>
 </head>
 <body>
@@ -232,6 +246,7 @@
     <svg id="canvas-svg" xmlns="http://www.w3.org/2000/svg">
       <g id="viewport">
         <g id="connectors"></g>
+        <g id="relations"></g>
         <g id="nodes"></g>
       </g>
     </svg>
@@ -252,8 +267,10 @@
         <button class="icon-btn" id="btn-zoomin" title="拡大 (+)">＋</button>
         <button class="icon-btn" id="btn-fit" title="全体表示 (0)">⤢</button>
         <div class="sep"></div>
+        <button class="icon-btn" id="btn-connect" title="関連線でつなぐ (ノードから別のノードへドラッグ)">⇄</button>
+        <div class="sep"></div>
         <button class="icon-btn" id="btn-export" title="書き出し">⇩</button>
-        <button class="icon-btn" id="btn-import" title="読み込み">⇧</button>
+        <button class="icon-btn" id="btn-import" title="読み込み (JSON / FreeMind .mm)">⇧</button>
         <button class="icon-btn" id="btn-share" title="共有リンクを作成">🔗</button>
         <div class="sep"></div>
         <button class="icon-btn" id="btn-theme" title="テーマ切替">◐</button>
@@ -266,7 +283,7 @@
 
   <div id="mapsdrawer" class="panel"></div>
   <div id="accountdrawer" class="panel"></div>
-  <input type="file" id="filepicker" accept="application/json" style="display:none">
+  <input type="file" id="filepicker" accept=".json,.mm,application/json,text/xml" style="display:none">
 
   <div id="stylepanel" class="panel">
     <div class="block">
@@ -348,7 +365,9 @@ var state = {
   selectedId: null,
   editingId: null,
   view: {x:0, y:0, scale:1},
-  theme: "system"
+  theme: "system",
+  connectMode: false,
+  selectedRelationId: null
 };
 var historyStack = [];
 var redoStack = [];
@@ -662,6 +681,11 @@ function getChildren(id){
   return out;
 }
 function getParent(id){ var n = getNode(id); return n && n.parentId ? getNode(n.parentId) : null; }
+function getRelations(){
+  var m = getMap(); if(!m) return {};
+  if(!m.relations) m.relations = {};
+  return m.relations;
+}
 function nextBranchColorIndex(){
   var kids = getChildren("root");
   return kids.length % BRANCH_COUNT;
@@ -680,25 +704,25 @@ function nodeBranchColorIndex(id){
 
 function pushHistory(){
   var m = getMap(); if(!m) return;
-  historyStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId}));
+  historyStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId, relations:m.relations||{}}));
   if(historyStack.length > 60) historyStack.shift();
   redoStack.length = 0;
 }
 function undo(){
   var m = getMap(); if(!m || historyStack.length===0) return;
-  redoStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId}));
+  redoStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId, relations:m.relations||{}}));
   var prev = JSON.parse(historyStack.pop());
-  m.nodes = prev.nodes; m.rootId = prev.rootId;
+  m.nodes = prev.nodes; m.rootId = prev.rootId; m.relations = prev.relations || {};
   state.selectedId = state.selectedId && m.nodes[state.selectedId] ? state.selectedId : null;
-  state.editingId = null;
+  state.editingId = null; state.selectedRelationId = null;
   fullRender(); scheduleSave();
 }
 function redo(){
   var m = getMap(); if(!m || redoStack.length===0) return;
-  historyStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId}));
+  historyStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId, relations:m.relations||{}}));
   var next = JSON.parse(redoStack.pop());
-  m.nodes = next.nodes; m.rootId = next.rootId;
-  state.editingId = null;
+  m.nodes = next.nodes; m.rootId = next.rootId; m.relations = next.relations || {};
+  state.editingId = null; state.selectedRelationId = null;
   fullRender(); scheduleSave();
 }
 
@@ -739,6 +763,11 @@ function deleteNode(id){
   function doDelete(){
     pushHistory();
     ids.forEach(function(nid){ delete m.nodes[nid]; });
+    var rel = getRelations();
+    Object.keys(rel).forEach(function(rid){
+      var r = rel[rid];
+      if(ids.indexOf(r.fromId) !== -1 || ids.indexOf(r.toId) !== -1) delete rel[rid];
+    });
     if(state.selectedId && ids.indexOf(state.selectedId) !== -1){
       var parent = getNode(getNode(id) ? getNode(id).parentId : null);
       state.selectedId = parent ? parent.id : "root";
@@ -859,12 +888,20 @@ function computeLayout(){
 }
 
 /* ============================== 描画 ============================== */
-var svgEl, viewportEl, connectorsEl, nodesEl;
+var svgEl, viewportEl, connectorsEl, relationsEl, nodesEl;
+var lastLayout = null;
 function initSvgRefs(){
   svgEl = $("#canvas-svg");
   viewportEl = $("#viewport");
   connectorsEl = $("#connectors");
+  relationsEl = $("#relations");
   nodesEl = $("#nodes");
+  relationsEl.addEventListener("click", function(e){
+    var t = e.target.closest ? e.target.closest("[data-rel-id]") : null;
+    if(!t) return;
+    e.stopPropagation();
+    openRelationEditor(t.dataset.relId);
+  });
 }
 function applyViewTransform(){
   var v = state.view;
@@ -879,10 +916,94 @@ function connectorPath(x1,y1,x2,y2){
   return "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2;
 }
 
+/* ============================== 関連線 (MindMeisterの「Connections」相当) ==============================
+   親子のツリー構造とは無関係に、任意の2つのノードを結んで矢印でつなぐ機能。
+   矢印・ラベル・色を持ち、m.relations にツリーとは独立して保存される。 */
+var RELATION_COLORS = ["var(--ink-soft)","#E4572E","#2E8B57","#4B45CE","#C9184A","#0E7C7B","#B08900","#6E44FF"];
+function edgePoint(px, py, bw, bh, tx, ty){
+  var dx = tx - px, dy = ty - py;
+  if(Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return {x:px, y:py};
+  var hw = bw/2, hh = bh/2;
+  var scaleX = Math.abs(dx) > 1e-6 ? hw/Math.abs(dx) : Infinity;
+  var scaleY = Math.abs(dy) > 1e-6 ? hh/Math.abs(dy) : Infinity;
+  var s = Math.min(scaleX, scaleY);
+  return {x: px + dx*s, y: py + dy*s};
+}
+function renderRelations(pos, boxes){
+  relationsEl.innerHTML = "";
+  var rel = getRelations();
+  var selId = state.selectedRelationId;
+  Object.keys(rel).forEach(function(id){
+    var r = rel[id];
+    var p1 = pos[r.fromId], p2 = pos[r.toId];
+    var b1 = boxes[r.fromId], b2 = boxes[r.toId];
+    if(!p1 || !p2 || !b1 || !b2) return; // 折りたたみ等で片方が非表示中
+    var mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
+    var dx = p2.x-p1.x, dy = p2.y-p1.y;
+    var len = Math.sqrt(dx*dx+dy*dy) || 1;
+    var nx = -dy/len, ny = dx/len;
+    var bend = (r.bend == null ? 36 : r.bend);
+    var cx = mx + nx*bend, cy = my + ny*bend;
+    var start = edgePoint(p1.x, p1.y, b1.w, b1.h, cx, cy);
+    var end = edgePoint(p2.x, p2.y, b2.w, b2.h, cx, cy);
+    var color = r.color || RELATION_COLORS[0];
+    var d = "M " + start.x + " " + start.y + " Q " + cx + " " + cy + " " + end.x + " " + end.y;
+    var isSel = id === selId;
+
+    var hit = el("path", true);
+    hit.setAttribute("class","relation-hit");
+    hit.setAttribute("d", d);
+    hit.dataset.relId = id;
+    relationsEl.appendChild(hit);
+
+    var path = el("path", true);
+    path.setAttribute("class", "relation-path" + (isSel ? " is-selected" : ""));
+    path.setAttribute("d", d);
+    path.setAttribute("stroke", color);
+    path.dataset.relId = id;
+    relationsEl.appendChild(path);
+
+    var ang = Math.atan2(end.y-cy, end.x-cx);
+    var ah = 9, spread = 0.42;
+    var a1x = end.x - ah*Math.cos(ang-spread), a1y = end.y - ah*Math.sin(ang-spread);
+    var a2x = end.x - ah*Math.cos(ang+spread), a2y = end.y - ah*Math.sin(ang+spread);
+    var head = el("path", true);
+    head.setAttribute("class", "relation-arrowhead" + (isSel ? " is-selected" : ""));
+    head.setAttribute("d", "M " + end.x + " " + end.y + " L " + a1x + " " + a1y + " L " + a2x + " " + a2y + " Z");
+    head.setAttribute("fill", color);
+    head.dataset.relId = id;
+    relationsEl.appendChild(head);
+
+    if(r.label){
+      var lg = el("g", true);
+      lg.dataset.relId = id;
+      var txt = el("text", true);
+      txt.setAttribute("class","relation-label-text");
+      txt.setAttribute("x", cx); txt.setAttribute("y", cy);
+      txt.setAttribute("text-anchor","middle");
+      txt.setAttribute("dy", "0.32em");
+      txt.textContent = r.label;
+      lg.appendChild(txt);
+      relationsEl.appendChild(lg);
+      try{
+        var bbox = txt.getBBox();
+        var pad = 5;
+        var rect = el("rect", true);
+        rect.setAttribute("class","relation-label-bg");
+        rect.setAttribute("x", bbox.x-pad); rect.setAttribute("y", bbox.y-pad);
+        rect.setAttribute("width", bbox.width+pad*2); rect.setAttribute("height", bbox.height+pad*2);
+        rect.setAttribute("rx", 6);
+        lg.insertBefore(rect, txt);
+      }catch(e){ /* getBBox が使えない環境では背景なしで表示 */ }
+    }
+  });
+}
+
 function fullRender(){
   var m = getMap();
-  if(!m){ connectorsEl.innerHTML=""; nodesEl.innerHTML=""; nodeEls={}; return; }
+  if(!m){ connectorsEl.innerHTML=""; relationsEl.innerHTML=""; nodesEl.innerHTML=""; nodeEls={}; lastLayout=null; return; }
   var layout = computeLayout();
+  lastLayout = layout;
   var pos = layout.pos, boxes = layout.boxes;
 
   // connectors
@@ -908,6 +1029,8 @@ function fullRender(){
     path.setAttribute("opacity", 0.75);
     connectorsEl.appendChild(path);
   });
+
+  renderRelations(pos, boxes);
 
   // nodes: remove stale
   Object.keys(nodeEls).forEach(function(id){
@@ -1041,6 +1164,10 @@ function attachNodeEvents(id, wrapper, card, textEl, collapseBtn){
     if(e.button !== 0) return;
     if(e.target === textEl && state.editingId === id) return;
     e.stopPropagation();
+    if(state.connectMode){
+      startRelationDrag(id, e);
+      return;
+    }
     selectNode(id);
     dragState = { id:id, startX:e.clientX, startY:e.clientY, moved:false,
       origin: getNode(id).manualOffset ? {dx:getNode(id).manualOffset.dx, dy:getNode(id).manualOffset.dy} : {dx:null, dy:null} };
@@ -1149,6 +1276,118 @@ function onNodeDragUp(){
   document.getElementById("canvas-wrap").classList.remove("node-dragging");
   if(dragState && dragState.moved){ scheduleSave(); }
   dragState = null;
+}
+
+/* ============================== 関連線をドラッグで作成 ============================== */
+var relationDragState = null;
+var tempRelationPathEl = null;
+function startRelationDrag(fromId, e){
+  if(!lastLayout || !lastLayout.pos[fromId]) return;
+  relationDragState = { fromId: fromId };
+  if(!tempRelationPathEl){
+    tempRelationPathEl = el("path", true);
+    tempRelationPathEl.setAttribute("class","relation-drag-preview");
+  }
+  relationsEl.appendChild(tempRelationPathEl);
+  updateRelationDragPreview(e.clientX, e.clientY);
+  document.addEventListener("mousemove", onRelationDragMove);
+  document.addEventListener("mouseup", onRelationDragUp);
+}
+function updateRelationDragPreview(clientX, clientY){
+  if(!relationDragState || !lastLayout) return;
+  var p = lastLayout.pos[relationDragState.fromId];
+  if(!p) return;
+  var w = toWorld(clientX, clientY);
+  tempRelationPathEl.setAttribute("d", "M " + p.x + " " + p.y + " L " + w.x + " " + w.y);
+}
+function onRelationDragMove(e){ updateRelationDragPreview(e.clientX, e.clientY); }
+function onRelationDragUp(e){
+  document.removeEventListener("mousemove", onRelationDragMove);
+  document.removeEventListener("mouseup", onRelationDragUp);
+  if(tempRelationPathEl && tempRelationPathEl.parentNode) tempRelationPathEl.parentNode.removeChild(tempRelationPathEl);
+  var st = relationDragState;
+  relationDragState = null;
+  if(!st) return;
+  var targetEl = document.elementFromPoint(e.clientX, e.clientY);
+  var wrapper = targetEl && targetEl.closest ? targetEl.closest(".node-outer") : null;
+  if(!wrapper) return;
+  var toId = wrapper.dataset.id;
+  if(!toId || toId === st.fromId) return;
+  createRelation(st.fromId, toId);
+}
+function createRelation(fromId, toId){
+  var m = getMap(); if(!m) return;
+  if(!m.relations) m.relations = {};
+  pushHistory();
+  var id = uid();
+  m.relations[id] = { id:id, fromId:fromId, toId:toId, label:"", color:null, bend:36 };
+  m.updatedAt = Date.now();
+  fullRender(); scheduleSave();
+  toast("関連線を追加しました");
+}
+function openRelationEditor(relId){
+  var rel = getRelations();
+  var r = rel[relId]; if(!r) return;
+  pushHistory();
+  state.selectedRelationId = relId;
+  fullRender();
+
+  var wrap = document.createElement("div");
+
+  var label = document.createElement("label"); label.textContent = "ラベル";
+  var input = document.createElement("input");
+  input.type = "text"; input.value = r.label || "";
+  input.placeholder = "例: 影響する、参照 など (空欄でもOK)";
+  input.addEventListener("input", function(){
+    r.label = input.value;
+    fullRender(); scheduleSave();
+  });
+
+  var colorLabel = document.createElement("label"); colorLabel.textContent = "色";
+  var swrow = document.createElement("div"); swrow.className = "swrow";
+  RELATION_COLORS.forEach(function(c){
+    var sw = document.createElement("div");
+    sw.className = "swatch" + (((r.color||RELATION_COLORS[0]) === c) ? " sel" : "");
+    sw.style.background = c;
+    sw.addEventListener("click", function(){
+      r.color = c;
+      swrow.querySelectorAll(".swatch").forEach(function(s){ s.classList.remove("sel"); });
+      sw.classList.add("sel");
+      fullRender(); scheduleSave();
+    });
+    swrow.appendChild(sw);
+  });
+
+  var row = document.createElement("div"); row.className = "actrow";
+  var swapBtn = document.createElement("button"); swapBtn.className = "btn ghost"; swapBtn.textContent = "向きを反転";
+  swapBtn.addEventListener("click", function(){
+    var tmp = r.fromId; r.fromId = r.toId; r.toId = tmp;
+    fullRender(); scheduleSave();
+  });
+  var delBtn = document.createElement("button"); delBtn.className = "btn danger"; delBtn.textContent = "削除";
+  delBtn.addEventListener("click", function(){
+    delete rel[relId];
+    state.selectedRelationId = null;
+    $("#modalveil").classList.remove("open");
+    fullRender(); scheduleSave();
+  });
+  row.appendChild(swapBtn); row.appendChild(delBtn);
+
+  wrap.id = "relationbox";
+  wrap.appendChild(label); wrap.appendChild(input);
+  wrap.appendChild(colorLabel); wrap.appendChild(swrow);
+  wrap.appendChild(row);
+
+  infoModal("関連線", wrap, "閉じる");
+  var veil = $("#modalveil");
+  var observer = new MutationObserver(function(){
+    if(!veil.classList.contains("open")){
+      state.selectedRelationId = null;
+      fullRender();
+      observer.disconnect();
+    }
+  });
+  observer.observe(veil, {attributes:true, attributeFilter:["class"]});
 }
 
 /* ============================== 編集 ============================== */
@@ -1318,6 +1557,7 @@ function bindCanvasEvents(){
   wrap.addEventListener("mousedown", function(e){
     if(e.button !== 0) return;
     if(e.target.closest(".node-card") || e.target.closest(".node-collapse")) return;
+    if(e.target.closest && e.target.closest("[data-rel-id]")) return;
     if(state.editingId) commitEdit(state.editingId);
     state.selectedId = null; closeStylePanelIfNoSel(); fullRender();
     panState = {startX:e.clientX, startY:e.clientY, ox:state.view.x, oy:state.view.y};
@@ -1371,6 +1611,7 @@ function bindKeyboard(){
     if(e.key === "+" || e.key === "="){ e.preventDefault(); setZoom(state.view.scale*1.15); return; }
     if(e.key === "-" || e.key === "_"){ e.preventDefault(); setZoom(state.view.scale/1.15); return; }
     if(e.key === "0"){ e.preventDefault(); fitToScreen(); return; }
+    if(e.key === "Escape" && state.connectMode){ setConnectMode(false); return; }
     if(!state.selectedId){
       if(e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight"){
         e.preventDefault(); selectNode("root", true);
@@ -1599,20 +1840,93 @@ function exportPNG(){
   }catch(e){ toast("PNG書き出しに失敗しました"); }
 }
 function importJSONFile(file){
+  var name = (file.name || "").toLowerCase();
+  if(name.indexOf(".mm") === name.length - 3){
+    importFreeMindFile(file);
+    return;
+  }
   var reader = new FileReader();
   reader.onload = function(){
     try{
       var data = JSON.parse(reader.result);
       if(!data.nodes || !data.rootId) throw new Error("invalid");
-      var id = uid();
-      data.id = id; data.updatedAt = Date.now();
-      state.maps[id] = data;
-      switchMap(id);
-      renderMapsDrawer();
-      toast("読み込みました: " + (data.title||"マップ"));
+      finishImportedMap(data);
     }catch(e){ toast("読み込みに失敗しました。ファイル形式をご確認ください"); }
   };
   reader.readAsText(file);
+}
+function finishImportedMap(data){
+  var id = uid();
+  data.id = id; data.updatedAt = Date.now();
+  state.maps[id] = data;
+  switchMap(id);
+  renderMapsDrawer();
+  scheduleSave();
+  toast("読み込みました: " + (data.title||"マップ"));
+}
+function importFreeMindFile(file){
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var data = parseFreeMindXML(reader.result);
+      finishImportedMap(data);
+    }catch(e){ toast("FreeMind形式(.mm)の読み込みに失敗しました。エクスポート形式をご確認ください"); }
+  };
+  reader.readAsText(file);
+}
+
+/* ------- FreeMind(.mm) インポート -------
+   MindMeisterなど多くのマインドマップツールは「FreeMind形式」で
+   エクスポートでき、その実体はシンプルなXMLなのでここで変換する。 */
+function directChildEls(el, tagName){
+  var out = [];
+  for(var i=0; i<el.childNodes.length; i++){
+    var c = el.childNodes[i];
+    if(c.nodeType === 1 && c.tagName && c.tagName.toLowerCase() === tagName) out.push(c);
+  }
+  return out;
+}
+function parseFreeMindXML(xmlText){
+  var doc = new DOMParser().parseFromString(xmlText, "text/xml");
+  if(doc.getElementsByTagName("parsererror").length) throw new Error("XML parse error");
+  var mapEl = doc.getElementsByTagName("map")[0];
+  if(!mapEl) throw new Error("not a FreeMind file");
+  var rootEls = directChildEls(mapEl, "node");
+  if(rootEls.length === 0) throw new Error("no root node");
+  var nodes = {};
+  var seq = 0;
+  function textOf(nodeEl){
+    var t = nodeEl.getAttribute("TEXT");
+    if(t) return t;
+    var richEls = directChildEls(nodeEl, "richcontent");
+    for(var i=0; i<richEls.length; i++){
+      var txt = (richEls[i].textContent || "").replace(/\s+/g," ").trim();
+      if(txt) return txt;
+    }
+    return "";
+  }
+  function uniqueId(raw){
+    var id = raw || ("fm_" + (seq++));
+    while(nodes[id]){ id = id + "_" + (seq++); }
+    return id;
+  }
+  function walk(nodeEl, parentId, order){
+    var id = uniqueId(nodeEl.getAttribute("ID"));
+    var fontEls = directChildEls(nodeEl, "font");
+    var bold = fontEls.length > 0 && fontEls[0].getAttribute("BOLD") === "true";
+    nodes[id] = {
+      id: id, text: textOf(nodeEl), parentId: parentId, order: order,
+      color: nodeEl.getAttribute("COLOR") || null, bold: bold, size:"m", shape:"text", icon:"",
+      collapsed: nodeEl.getAttribute("FOLDED") === "true",
+      manualOffset: null, branchColorIndex: null
+    };
+    directChildEls(nodeEl, "node").forEach(function(c, i){ walk(c, id, i); });
+    return id;
+  }
+  var rootId = walk(rootEls[0], null, 0);
+  var depth1 = Object.keys(nodes).filter(function(k){ return nodes[k].parentId === rootId; });
+  depth1.forEach(function(k, i){ nodes[k].branchColorIndex = i % BRANCH_COUNT; });
+  return { title: nodes[rootId].text || "インポートしたマップ", rootId: rootId, nodes: nodes };
 }
 
 /* ==============================================================
@@ -1621,7 +1935,7 @@ function importJSONFile(file){
    リンクを開けば同じマップのコピーを取得できる。
    ============================================================== */
 function encodeMapForUrl(m){
-  var payload = {title:m.title, rootId:m.rootId, nodes:m.nodes};
+  var payload = {title:m.title, rootId:m.rootId, nodes:m.nodes, relations:m.relations||{}};
   var json = JSON.stringify(payload);
   var b64 = btoa(unescape(encodeURIComponent(json)));
   return b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
@@ -1672,6 +1986,14 @@ function cycleTheme(){
 }
 
 /* ============================== ツールバー配線 ============================== */
+function setConnectMode(on){
+  state.connectMode = !!on;
+  var btn = $("#btn-connect");
+  if(btn) btn.classList.toggle("active", state.connectMode);
+  var wrap = document.getElementById("canvas-wrap");
+  if(wrap) wrap.classList.toggle("connect-mode", state.connectMode);
+  toast(state.connectMode ? "ノードから別のノードへドラッグして関連線を作成できます (Escで終了)" : "関連線モードを終了しました");
+}
 function bindToolbar(){
   $("#btn-undo").addEventListener("click", undo);
   $("#btn-redo").addEventListener("click", redo);
@@ -1689,6 +2011,7 @@ function bindToolbar(){
     e.target.value = "";
   });
   $("#btn-share").addEventListener("click", openShareModal);
+  $("#btn-connect").addEventListener("click", function(){ setConnectMode(!state.connectMode); });
   $("#btn-newmap").addEventListener("click", function(){
     var id = createMap("新しいマインドマップ", false);
     switchMap(id);
@@ -1769,7 +2092,7 @@ function init(){
       var data = decodeMapFromUrl(sharedPayload);
       if(!data.nodes || !data.rootId) throw new Error("invalid");
       var id = uid();
-      var m = {id:id, title:data.title||"共有マップ", rootId:data.rootId, nodes:data.nodes, createdAt:Date.now(), updatedAt:Date.now()};
+      var m = {id:id, title:data.title||"共有マップ", rootId:data.rootId, nodes:data.nodes, relations:data.relations||{}, createdAt:Date.now(), updatedAt:Date.now()};
       state.maps[id] = m;
       switchMap(id);
       // URL からリンク文字列を消しておく(ブックマーク/リロード時の混乱防止)
