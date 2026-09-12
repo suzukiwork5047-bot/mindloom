@@ -239,8 +239,8 @@
   #relationbox label{font-size:11px; color:var(--ink-soft); display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
   #relationbox input[type=text]{width:100%; box-sizing:border-box; padding:9px 11px; border-radius:9px; border:1.4px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13.5px; margin-bottom:16px; font-family:var(--font-body);}
   #relationbox .hint{font-size:11.5px; color:var(--ink-soft); line-height:1.6; margin-bottom:16px;}
-  #relationbox .swatch.auto{background:var(--surface-2); position:relative;}
-  #relationbox .swatch.auto::after{content:""; position:absolute; left:50%; top:50%; width:2px; height:16px; background:var(--ink-soft); transform:translate(-50%,-50%) rotate(45deg); border-radius:2px;}
+  .swatch.auto{background:var(--surface-2); position:relative;}
+  .swatch.auto::after{content:""; position:absolute; left:50%; top:50%; width:2px; height:16px; background:var(--ink-soft); transform:translate(-50%,-50%) rotate(45deg); border-radius:2px;}
 </style>
 </head>
 <body>
@@ -293,6 +293,10 @@
     <div class="block">
       <h4>色</h4>
       <div class="swrow" id="colorrow"></div>
+    </div>
+    <div class="block">
+      <h4>文字色</h4>
+      <div class="swrow" id="textcolorrow"></div>
     </div>
     <div class="block">
       <h4>太さ</h4>
@@ -640,7 +644,7 @@ function branchColorVar(idx){ return "var(--branch-" + (((idx%BRANCH_COUNT)+BRAN
 function newNode(parentId, text, order){
   return {
     id: uid(), text: text || "", parentId: parentId || null, order: order || 0,
-    color: null, bold:false, size:"m", shape:"text", icon:"", collapsed:false,
+    color: null, textColor: null, bold:false, size:"m", shape:"text", icon:"", collapsed:false,
     manualOffset: null, branchColorIndex: null
   };
 }
@@ -1141,7 +1145,7 @@ function updateNodeVisual(id, n){
     rec.marker.style.display = shape === "text" ? "" : "none";
     rec.marker.style.borderColor = accentColor;
   }
-  rec.card.style.color = "";
+  rec.card.style.color = n.textColor || "";
   rec.iconEl.textContent = n.icon || "";
   rec.iconEl.style.display = n.icon ? "" : "none";
   if(state.editingId !== id){
@@ -1572,6 +1576,21 @@ function buildStylePanelStatic(){
   custom.appendChild(inp);
   colorrow.appendChild(custom);
 
+  var textcolorrow = $("#textcolorrow");
+  textcolorrow.innerHTML = "";
+  var autoText = document.createElement("div");
+  autoText.className = "swatch auto";
+  autoText.title = "自動(初期値の文字色に戻す)";
+  autoText.addEventListener("click", function(){ applyStyleChange({textColor:null}); });
+  textcolorrow.appendChild(autoText);
+  var customText = document.createElement("div");
+  customText.className = "swatch custom";
+  var inpText = document.createElement("input");
+  inpText.type = "color"; inpText.value = "#26232C";
+  inpText.addEventListener("input", function(){ applyStyleChange({textColor:inpText.value}); });
+  customText.appendChild(inpText);
+  textcolorrow.appendChild(customText);
+
   ["boldseg","sizeseg","shapeseg"].forEach(function(segId){
     document.getElementById(segId).querySelectorAll("button").forEach(function(btn){
       btn.addEventListener("click", function(){
@@ -1613,6 +1632,10 @@ function refreshStylePanel(){
   $("#colorrow").querySelectorAll(".swatch").forEach(function(sw, i){
     if(sw.classList.contains("custom")) return;
     sw.classList.toggle("sel", !n.color && colorIdx === i);
+  });
+  $("#textcolorrow").querySelectorAll(".swatch").forEach(function(sw){
+    if(sw.classList.contains("custom")) return;
+    sw.classList.toggle("sel", !n.textColor);
   });
   document.querySelectorAll("#boldseg button").forEach(function(b){ b.classList.toggle("on", (b.dataset.v==="1") === !!n.bold); });
   document.querySelectorAll("#sizeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.v === (n.size||"m")); });
