@@ -310,6 +310,10 @@
       <h4>形</h4>
       <div class="seg" id="shapeseg"><button data-v="text">テキスト</button><button data-v="card">カード</button><button data-v="pill">丸型</button></div>
     </div>
+    <div class="block" id="bgcolorblock">
+      <h4>背景色（枠の中の色）</h4>
+      <div class="swrow" id="bgcolorrow"></div>
+    </div>
     <div class="block">
       <h4>アイコン</h4>
       <div class="emojirow" id="emojirow"></div>
@@ -644,7 +648,7 @@ function branchColorVar(idx){ return "var(--branch-" + (((idx%BRANCH_COUNT)+BRAN
 function newNode(parentId, text, order){
   return {
     id: uid(), text: text || "", parentId: parentId || null, order: order || 0,
-    color: null, textColor: null, bold:false, size:"m", shape:"text", icon:"", collapsed:false,
+    color: null, textColor: null, bgColor: null, bold:false, size:"m", shape:"text", icon:"", collapsed:false,
     manualOffset: null, branchColorIndex: null
   };
 }
@@ -1146,6 +1150,7 @@ function updateNodeVisual(id, n){
     rec.marker.style.borderColor = accentColor;
   }
   rec.card.style.color = n.textColor || "";
+  rec.card.style.background = (shape !== "text" && n.bgColor) ? n.bgColor : "";
   rec.iconEl.textContent = n.icon || "";
   rec.iconEl.style.display = n.icon ? "" : "none";
   if(state.editingId !== id){
@@ -1583,6 +1588,16 @@ function buildStylePanelStatic(){
   autoText.title = "自動(初期値の文字色に戻す)";
   autoText.addEventListener("click", function(){ applyStyleChange({textColor:null}); });
   textcolorrow.appendChild(autoText);
+  for(var ti=0; ti<BRANCH_COUNT; ti++){
+    var tsw = document.createElement("div");
+    tsw.className = "swatch";
+    tsw.dataset.tc = "var(--branch-" + ti + ")";
+    tsw.style.background = "var(--branch-" + ti + ")";
+    tsw.addEventListener("click", (function(v){
+      return function(){ applyStyleChange({textColor: v}); };
+    })(tsw.dataset.tc));
+    textcolorrow.appendChild(tsw);
+  }
   var customText = document.createElement("div");
   customText.className = "swatch custom";
   var inpText = document.createElement("input");
@@ -1590,6 +1605,21 @@ function buildStylePanelStatic(){
   inpText.addEventListener("input", function(){ applyStyleChange({textColor:inpText.value}); });
   customText.appendChild(inpText);
   textcolorrow.appendChild(customText);
+
+  var bgcolorrow = $("#bgcolorrow");
+  bgcolorrow.innerHTML = "";
+  var autoBg = document.createElement("div");
+  autoBg.className = "swatch auto";
+  autoBg.title = "自動(初期値の背景色に戻す)";
+  autoBg.addEventListener("click", function(){ applyStyleChange({bgColor:null}); });
+  bgcolorrow.appendChild(autoBg);
+  var customBg = document.createElement("div");
+  customBg.className = "swatch custom";
+  var inpBg = document.createElement("input");
+  inpBg.type = "color"; inpBg.value = "#FFFFFF";
+  inpBg.addEventListener("input", function(){ applyStyleChange({bgColor:inpBg.value}); });
+  customBg.appendChild(inpBg);
+  bgcolorrow.appendChild(customBg);
 
   ["boldseg","sizeseg","shapeseg"].forEach(function(segId){
     document.getElementById(segId).querySelectorAll("button").forEach(function(btn){
@@ -1635,8 +1665,16 @@ function refreshStylePanel(){
   });
   $("#textcolorrow").querySelectorAll(".swatch").forEach(function(sw){
     if(sw.classList.contains("custom")) return;
-    sw.classList.toggle("sel", !n.textColor);
+    if(sw.classList.contains("auto")){ sw.classList.toggle("sel", !n.textColor); return; }
+    sw.classList.toggle("sel", !!n.textColor && n.textColor === sw.dataset.tc);
   });
+  $("#bgcolorrow").querySelectorAll(".swatch").forEach(function(sw){
+    if(sw.classList.contains("custom")) return;
+    sw.classList.toggle("sel", !n.bgColor);
+  });
+  var isTextShape = (n.shape||"text") === "text";
+  $("#bgcolorblock").style.opacity = isTextShape ? .4 : 1;
+  $("#bgcolorblock").style.pointerEvents = isTextShape ? "none" : "auto";
   document.querySelectorAll("#boldseg button").forEach(function(b){ b.classList.toggle("on", (b.dataset.v==="1") === !!n.bold); });
   document.querySelectorAll("#sizeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.v === (n.size||"m")); });
   document.querySelectorAll("#shapeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.v === (n.shape||"text")); });
