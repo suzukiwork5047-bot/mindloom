@@ -234,9 +234,14 @@
   .relation-label-text{font-family:var(--font-body); font-size:11.5px; font-weight:600; fill:var(--ink); pointer-events:none;}
   .relation-label-bg{fill:var(--surface); stroke:var(--border); stroke-width:1; pointer-events:none;}
   .relation-drag-preview{fill:none; stroke:var(--accent); stroke-width:2; stroke-dasharray:5 5; pointer-events:none;}
-  #relationbox .swrow{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px;}
+  .relation-bend-handle{fill:var(--surface); stroke:var(--accent); stroke-width:2; cursor:grab;}
+  .relation-bend-handle:active{cursor:grabbing;}
+  #relationbox .swrow{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:16px;}
   #relationbox label{font-size:11px; color:var(--ink-soft); display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
   #relationbox input[type=text]{width:100%; box-sizing:border-box; padding:9px 11px; border-radius:9px; border:1.4px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13.5px; margin-bottom:16px; font-family:var(--font-body);}
+  #relationbox .hint{font-size:11.5px; color:var(--ink-soft); line-height:1.6; margin-bottom:16px;}
+  #relationbox .swatch.auto{background:var(--surface-2); position:relative;}
+  #relationbox .swatch.auto::after{content:""; position:absolute; left:50%; top:50%; width:2px; height:16px; background:var(--ink-soft); transform:translate(-50%,-50%) rotate(45deg); border-radius:2px;}
 </style>
 </head>
 <body>
@@ -946,7 +951,9 @@ function renderRelations(pos, boxes){
     var cx = mx + nx*bend, cy = my + ny*bend;
     var start = edgePoint(p1.x, p1.y, b1.w, b1.h, cx, cy);
     var end = edgePoint(p2.x, p2.y, b2.w, b2.h, cx, cy);
-    var color = r.color || RELATION_COLORS[0];
+    var lineColor = r.lineColor || r.color || RELATION_COLORS[0];
+    var textColor = r.textColor || "var(--ink)";
+    var fillColor = r.fillColor || "var(--surface)";
     var d = "M " + start.x + " " + start.y + " Q " + cx + " " + cy + " " + end.x + " " + end.y;
     var isSel = id === selId;
 
@@ -959,7 +966,7 @@ function renderRelations(pos, boxes){
     var path = el("path", true);
     path.setAttribute("class", "relation-path" + (isSel ? " is-selected" : ""));
     path.setAttribute("d", d);
-    path.setAttribute("stroke", color);
+    path.setAttribute("stroke", lineColor);
     path.dataset.relId = id;
     relationsEl.appendChild(path);
 
@@ -970,7 +977,7 @@ function renderRelations(pos, boxes){
     var head = el("path", true);
     head.setAttribute("class", "relation-arrowhead" + (isSel ? " is-selected" : ""));
     head.setAttribute("d", "M " + end.x + " " + end.y + " L " + a1x + " " + a1y + " L " + a2x + " " + a2y + " Z");
-    head.setAttribute("fill", color);
+    head.setAttribute("fill", lineColor);
     head.dataset.relId = id;
     relationsEl.appendChild(head);
 
@@ -982,6 +989,7 @@ function renderRelations(pos, boxes){
       txt.setAttribute("x", cx); txt.setAttribute("y", cy);
       txt.setAttribute("text-anchor","middle");
       txt.setAttribute("dy", "0.32em");
+      txt.setAttribute("fill", textColor);
       txt.textContent = r.label;
       lg.appendChild(txt);
       relationsEl.appendChild(lg);
@@ -993,8 +1001,19 @@ function renderRelations(pos, boxes){
         rect.setAttribute("x", bbox.x-pad); rect.setAttribute("y", bbox.y-pad);
         rect.setAttribute("width", bbox.width+pad*2); rect.setAttribute("height", bbox.height+pad*2);
         rect.setAttribute("rx", 6);
+        rect.setAttribute("fill", fillColor);
         lg.insertBefore(rect, txt);
       }catch(e){ /* getBBox が使えない環境では背景なしで表示 */ }
+    }
+
+    if(isSel){
+      var handle = el("circle", true);
+      handle.setAttribute("class","relation-bend-handle");
+      handle.setAttribute("cx", cx); handle.setAttribute("cy", cy); handle.setAttribute("r", 6);
+      handle.addEventListener("mousedown", (function(relId){
+        return function(ev){ ev.stopPropagation(); startBendDrag(relId, ev); };
+      })(id));
+      relationsEl.appendChild(handle);
     }
   });
 }
@@ -1011,6 +1030,7 @@ function fullRender(){
   Object.keys(m.nodes).forEach(function(id){
     var n = m.nodes[id];
     if(!n.parentId) return;
+    if(n.floating) return; // 空白ドロップで作った「浮遊ノード」はツリー線を引かない(関連線だけでつながる)
     var parent = m.nodes[n.parentId];
     if(!parent) return;
     if(parent.collapsed) return;
@@ -1310,20 +1330,77 @@ function onRelationDragUp(e){
   if(!st) return;
   var targetEl = document.elementFromPoint(e.clientX, e.clientY);
   var wrapper = targetEl && targetEl.closest ? targetEl.closest(".node-outer") : null;
-  if(!wrapper) return;
-  var toId = wrapper.dataset.id;
-  if(!toId || toId === st.fromId) return;
-  createRelation(st.fromId, toId);
+  if(wrapper){
+    var toId = wrapper.dataset.id;
+    if(!toId || toId === st.fromId) return;
+    createRelation(st.fromId, toId);
+    return;
+  }
+  // 何もない場所でマウスを離した場合: そこに新しいノード(テキストボックス)を作って関連線でつなぐ
+  var overCanvas = targetEl && targetEl.closest ? targetEl.closest("#canvas-wrap") : null;
+  if(!overCanvas) return;
+  pushHistory();
+  var newId = createFloatingNodeAt(e.clientX, e.clientY);
+  if(!newId) return;
+  var m = getMap();
+  if(!m.relations) m.relations = {};
+  var relId = uid();
+  m.relations[relId] = { id:relId, fromId:st.fromId, toId:newId, label:"", lineColor:null, textColor:null, fillColor:null, bend:36 };
+  m.updatedAt = Date.now();
+  fullRender(); scheduleSave();
+  startEditing(newId);
+}
+function createFloatingNodeAt(clientX, clientY){
+  var m = getMap(); if(!m) return null;
+  var w = toWorld(clientX, clientY);
+  var rootPos = (lastLayout && lastLayout.pos[m.rootId]) ? lastLayout.pos[m.rootId] : {x:0,y:0};
+  var siblings = getChildren(m.rootId);
+  var n = newNode(m.rootId, "", siblings.length);
+  n.floating = true;
+  n.manualOffset = { dx: w.x - rootPos.x, dy: w.y - rootPos.y };
+  n.branchColorIndex = nextBranchColorIndex();
+  m.nodes[n.id] = n;
+  return n.id;
 }
 function createRelation(fromId, toId){
   var m = getMap(); if(!m) return;
   if(!m.relations) m.relations = {};
   pushHistory();
   var id = uid();
-  m.relations[id] = { id:id, fromId:fromId, toId:toId, label:"", color:null, bend:36 };
+  m.relations[id] = { id:id, fromId:fromId, toId:toId, label:"", lineColor:null, textColor:null, fillColor:null, bend:36 };
   m.updatedAt = Date.now();
   fullRender(); scheduleSave();
   toast("関連線を追加しました");
+}
+
+/* ============================== 関連線の曲がり具合をドラッグで自由に調整 ============================== */
+var bendDragState = null;
+function startBendDrag(relId, e){
+  pushHistory();
+  bendDragState = { relId: relId };
+  document.addEventListener("mousemove", onBendDragMove);
+  document.addEventListener("mouseup", onBendDragUp);
+}
+function onBendDragMove(e){
+  if(!bendDragState || !lastLayout) return;
+  var rel = getRelations();
+  var r = rel[bendDragState.relId]; if(!r) return;
+  var p1 = lastLayout.pos[r.fromId], p2 = lastLayout.pos[r.toId];
+  if(!p1 || !p2) return;
+  var mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
+  var dx = p2.x-p1.x, dy = p2.y-p1.y;
+  var len = Math.sqrt(dx*dx+dy*dy) || 1;
+  var nx = -dy/len, ny = dx/len;
+  var w = toWorld(e.clientX, e.clientY);
+  var vx = w.x-mx, vy = w.y-my;
+  r.bend = vx*nx + vy*ny;
+  fullRender();
+}
+function onBendDragUp(){
+  document.removeEventListener("mousemove", onBendDragMove);
+  document.removeEventListener("mouseup", onBendDragUp);
+  if(bendDragState) scheduleSave();
+  bendDragState = null;
 }
 function openRelationEditor(relId){
   var rel = getRelations();
@@ -1334,6 +1411,9 @@ function openRelationEditor(relId){
 
   var wrap = document.createElement("div");
 
+  var hint = document.createElement("div"); hint.className = "hint";
+  hint.textContent = "線の中央にある○をドラッグすると、曲がり具合を自由に調整できます。";
+
   var label = document.createElement("label"); label.textContent = "ラベル";
   var input = document.createElement("input");
   input.type = "text"; input.value = r.label || "";
@@ -1343,20 +1423,40 @@ function openRelationEditor(relId){
     fullRender(); scheduleSave();
   });
 
-  var colorLabel = document.createElement("label"); colorLabel.textContent = "色";
-  var swrow = document.createElement("div"); swrow.className = "swrow";
-  RELATION_COLORS.forEach(function(c){
-    var sw = document.createElement("div");
-    sw.className = "swatch" + (((r.color||RELATION_COLORS[0]) === c) ? " sel" : "");
-    sw.style.background = c;
-    sw.addEventListener("click", function(){
-      r.color = c;
-      swrow.querySelectorAll(".swatch").forEach(function(s){ s.classList.remove("sel"); });
-      sw.classList.add("sel");
-      fullRender(); scheduleSave();
+  // 互換: 以前のバージョンで保存された r.color を線の色として引き継ぐ
+  if(r.lineColor === undefined) r.lineColor = r.color || null;
+
+  function buildColorRow(getVal, setVal){
+    var row = document.createElement("div"); row.className = "swrow";
+    function refresh(){
+      row.querySelectorAll(".swatch").forEach(function(s){ s.classList.remove("sel"); });
+      var cur = getVal();
+      var match = row.querySelector('[data-c="' + (cur||"") + '"]');
+      if(match) match.classList.add("sel");
+      else row.querySelector(".auto").classList.add("sel");
+    }
+    var auto = document.createElement("div");
+    auto.className = "swatch auto"; auto.title = "自動(初期値)"; auto.dataset.c = "";
+    auto.addEventListener("click", function(){ setVal(null); refresh(); fullRender(); scheduleSave(); });
+    row.appendChild(auto);
+    RELATION_COLORS.forEach(function(c){
+      var sw = document.createElement("div");
+      sw.className = "swatch"; sw.style.background = c; sw.dataset.c = c;
+      sw.addEventListener("click", function(){ setVal(c); refresh(); fullRender(); scheduleSave(); });
+      row.appendChild(sw);
     });
-    swrow.appendChild(sw);
-  });
+    refresh();
+    return row;
+  }
+
+  var lineLabel = document.createElement("label"); lineLabel.textContent = "矢印(線)の色";
+  var lineRow = buildColorRow(function(){ return r.lineColor; }, function(v){ r.lineColor = v; });
+
+  var textLabel = document.createElement("label"); textLabel.textContent = "文字色";
+  var textRow = buildColorRow(function(){ return r.textColor; }, function(v){ r.textColor = v; });
+
+  var fillLabel = document.createElement("label"); fillLabel.textContent = "抜き色(ラベルの背景)";
+  var fillRow = buildColorRow(function(){ return r.fillColor; }, function(v){ r.fillColor = v; });
 
   var row = document.createElement("div"); row.className = "actrow";
   var swapBtn = document.createElement("button"); swapBtn.className = "btn ghost"; swapBtn.textContent = "向きを反転";
@@ -1374,8 +1474,11 @@ function openRelationEditor(relId){
   row.appendChild(swapBtn); row.appendChild(delBtn);
 
   wrap.id = "relationbox";
+  wrap.appendChild(hint);
   wrap.appendChild(label); wrap.appendChild(input);
-  wrap.appendChild(colorLabel); wrap.appendChild(swrow);
+  wrap.appendChild(lineLabel); wrap.appendChild(lineRow);
+  wrap.appendChild(textLabel); wrap.appendChild(textRow);
+  wrap.appendChild(fillLabel); wrap.appendChild(fillRow);
   wrap.appendChild(row);
 
   infoModal("関連線", wrap, "閉じる");
