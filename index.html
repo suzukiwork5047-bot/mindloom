@@ -226,16 +226,15 @@
 
   /* ---------- 関連線 (ノード同士の自由な結び付け) ---------- */
   #canvas-wrap.connect-mode .node-card{cursor:crosshair;}
-  .relation-hit{fill:none; stroke:transparent; stroke-width:16; cursor:pointer;}
+  .relation-hit{fill:none; stroke:transparent; stroke-width:16; cursor:grab;}
+  .relation-hit:active{cursor:grabbing;}
   .relation-path{fill:none; stroke-width:2; stroke-dasharray:7 5; stroke-linecap:round; opacity:.85; pointer-events:none;}
   .relation-path.is-selected{stroke-width:3; stroke-dasharray:none; opacity:1;}
   .relation-arrowhead{opacity:.9; pointer-events:none;}
   .relation-arrowhead.is-selected{opacity:1;}
-  .relation-label-text{font-family:var(--font-body); font-size:11.5px; font-weight:600; fill:var(--ink); pointer-events:none;}
-  .relation-label-bg{fill:var(--surface); stroke:var(--border); stroke-width:1; pointer-events:none;}
+  .relation-label-text{font-family:var(--font-body); font-size:11.5px; font-weight:600; pointer-events:none;}
+  .relation-label-bg{stroke:var(--border); stroke-width:1; pointer-events:none;}
   .relation-drag-preview{fill:none; stroke:var(--accent); stroke-width:2; stroke-dasharray:5 5; pointer-events:none;}
-  .relation-bend-handle{fill:var(--surface); stroke:var(--accent); stroke-width:2; cursor:grab;}
-  .relation-bend-handle:active{cursor:grabbing;}
   #relationbox .swrow{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:16px;}
   #relationbox label{font-size:11px; color:var(--ink-soft); display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
   #relationbox input[type=text]{width:100%; box-sizing:border-box; padding:9px 11px; border-radius:9px; border:1.4px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13.5px; margin-bottom:16px; font-family:var(--font-body);}
@@ -901,11 +900,14 @@ function initSvgRefs(){
   connectorsEl = $("#connectors");
   relationsEl = $("#relations");
   nodesEl = $("#nodes");
-  relationsEl.addEventListener("click", function(e){
+  relationsEl.addEventListener("mousedown", function(e){
+    if(e.button !== 0) return;
     var t = e.target.closest ? e.target.closest("[data-rel-id]") : null;
     if(!t) return;
     e.stopPropagation();
-    openRelationEditor(t.dataset.relId);
+    relationPointerState = { relId: t.dataset.relId, startX:e.clientX, startY:e.clientY, moved:false };
+    document.addEventListener("mousemove", onRelationPointerMove);
+    document.addEventListener("mouseup", onRelationPointerUp);
   });
 }
 function applyViewTransform(){
@@ -1004,16 +1006,6 @@ function renderRelations(pos, boxes){
         rect.setAttribute("fill", fillColor);
         lg.insertBefore(rect, txt);
       }catch(e){ /* getBBox が使えない環境では背景なしで表示 */ }
-    }
-
-    if(isSel){
-      var handle = el("circle", true);
-      handle.setAttribute("class","relation-bend-handle");
-      handle.setAttribute("cx", cx); handle.setAttribute("cy", cy); handle.setAttribute("r", 6);
-      handle.addEventListener("mousedown", (function(relId){
-        return function(ev){ ev.stopPropagation(); startBendDrag(relId, ev); };
-      })(id));
-      relationsEl.appendChild(handle);
     }
   });
 }
@@ -1373,34 +1365,45 @@ function createRelation(fromId, toId){
   toast("関連線を追加しました");
 }
 
-/* ============================== 関連線の曲がり具合をドラッグで自由に調整 ============================== */
-var bendDragState = null;
-function startBendDrag(relId, e){
-  pushHistory();
-  bendDragState = { relId: relId };
-  document.addEventListener("mousemove", onBendDragMove);
-  document.addEventListener("mouseup", onBendDragUp);
+/* ============================== 関連線: どこを触ってもドラッグで曲げ調整、動かさずに離せば編集パネル ============================== */
+var relationPointerState = null;
+function onRelationPointerMove(e){
+  if(!relationPointerState) return;
+  var dx = e.clientX - relationPointerState.startX, dy = e.clientY - relationPointerState.startY;
+  if(!relationPointerState.moved){
+    if(Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    relationPointerState.moved = true;
+    pushHistory();
+    state.selectedRelationId = relationPointerState.relId;
+  }
+  adjustRelationBend(relationPointerState.relId, e.clientX, e.clientY);
 }
-function onBendDragMove(e){
-  if(!bendDragState || !lastLayout) return;
+function onRelationPointerUp(e){
+  document.removeEventListener("mousemove", onRelationPointerMove);
+  document.removeEventListener("mouseup", onRelationPointerUp);
+  var st = relationPointerState;
+  relationPointerState = null;
+  if(!st) return;
+  if(st.moved){
+    scheduleSave();
+  } else {
+    openRelationEditor(st.relId);
+  }
+}
+function adjustRelationBend(relId, clientX, clientY){
+  if(!lastLayout) return;
   var rel = getRelations();
-  var r = rel[bendDragState.relId]; if(!r) return;
+  var r = rel[relId]; if(!r) return;
   var p1 = lastLayout.pos[r.fromId], p2 = lastLayout.pos[r.toId];
   if(!p1 || !p2) return;
   var mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
   var dx = p2.x-p1.x, dy = p2.y-p1.y;
   var len = Math.sqrt(dx*dx+dy*dy) || 1;
   var nx = -dy/len, ny = dx/len;
-  var w = toWorld(e.clientX, e.clientY);
+  var w = toWorld(clientX, clientY);
   var vx = w.x-mx, vy = w.y-my;
   r.bend = vx*nx + vy*ny;
   fullRender();
-}
-function onBendDragUp(){
-  document.removeEventListener("mousemove", onBendDragMove);
-  document.removeEventListener("mouseup", onBendDragUp);
-  if(bendDragState) scheduleSave();
-  bendDragState = null;
 }
 function openRelationEditor(relId){
   var rel = getRelations();
@@ -1412,7 +1415,7 @@ function openRelationEditor(relId){
   var wrap = document.createElement("div");
 
   var hint = document.createElement("div"); hint.className = "hint";
-  hint.textContent = "線の中央にある○をドラッグすると、曲がり具合を自由に調整できます。";
+  hint.textContent = "この線のどこでもドラッグすると、曲がり具合を自由に調整できます(このパネルを閉じてからお試しください)。";
 
   var label = document.createElement("label"); label.textContent = "ラベル";
   var input = document.createElement("input");
