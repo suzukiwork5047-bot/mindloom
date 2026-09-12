@@ -1,3 +1,8 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mindloom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -140,8 +145,21 @@
   #toolbar .sep{width:1px; height:20px; background:var(--border); margin:0 5px;}
   #zoomlabel{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); width:40px; text-align:center;}
 
+  #rightrow{display:flex; align-items:center; gap:10px;}
+  #accountbtn{display:flex; align-items:center; gap:7px; padding:6px 13px 6px 7px; cursor:pointer;}
+  #accountbtn[hidden]{display:none;}
+  #accountbtn .ic{width:24px; height:24px; border-radius:999px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:12px; overflow:hidden; flex:none;}
+  #accountbtn .ic img{width:100%; height:100%; border-radius:999px; object-fit:cover; display:block;}
+  #accountbtn .lbl{font-size:13px; font-weight:600; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis;}
+
   #mapsdrawer{position:absolute; top:64px; left:16px; width:290px; max-height:70vh; overflow:auto; display:none; padding:8px; z-index:20;}
   #mapsdrawer.open{display:block;}
+  #accountdrawer{position:absolute; top:64px; right:16px; width:240px; display:none; padding:14px; z-index:20;}
+  #accountdrawer.open{display:block;}
+  #accountdrawer .who{font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  #accountdrawer .email{font-size:11.5px; color:var(--ink-soft); margin-top:2px; margin-bottom:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  #accountdrawer .signin-hint{font-size:12px; color:var(--ink-soft); line-height:1.6; margin-bottom:12px;}
+  #accountdrawer .btn{width:100%;}
   #mapsdrawer .row{display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:10px; cursor:pointer;}
   #mapsdrawer .row:hover{background:var(--surface-2);}
   #mapsdrawer .row.current{background:var(--accent-soft);}
@@ -206,6 +224,8 @@
   ::selection{background:var(--accent-soft);}
   input:focus-visible, button:focus-visible, [contenteditable]:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 </style>
+</head>
+<body>
 
 <div id="app">
   <div id="canvas-wrap">
@@ -222,24 +242,30 @@
       <div id="brand" class="panel"><span class="mark">🧠</span><span class="name">Mindloom</span></div>
       <div id="maptitle-btn" class="panel"><span class="t" id="maptitle-text">マップ</span><span class="chev">▾</span></div>
     </div>
-    <div id="toolbar" class="panel">
-      <button class="icon-btn" id="btn-undo" title="元に戻す (Ctrl+Z)">↶</button>
-      <button class="icon-btn" id="btn-redo" title="やり直す (Ctrl+Shift+Z)">↷</button>
-      <div class="sep"></div>
-      <button class="icon-btn" id="btn-zoomout" title="縮小 (-)">－</button>
-      <span id="zoomlabel">100%</span>
-      <button class="icon-btn" id="btn-zoomin" title="拡大 (+)">＋</button>
-      <button class="icon-btn" id="btn-fit" title="全体表示 (0)">⤢</button>
-      <div class="sep"></div>
-      <button class="icon-btn" id="btn-export" title="書き出し">⇩</button>
-      <button class="icon-btn" id="btn-import" title="読み込み">⇧</button>
-      <button class="icon-btn" id="btn-share" title="共有リンクを作成">🔗</button>
-      <div class="sep"></div>
-      <button class="icon-btn" id="btn-theme" title="テーマ切替">◐</button>
+    <div id="rightrow">
+      <div id="toolbar" class="panel">
+        <button class="icon-btn" id="btn-undo" title="元に戻す (Ctrl+Z)">↶</button>
+        <button class="icon-btn" id="btn-redo" title="やり直す (Ctrl+Shift+Z)">↷</button>
+        <div class="sep"></div>
+        <button class="icon-btn" id="btn-zoomout" title="縮小 (-)">－</button>
+        <span id="zoomlabel">100%</span>
+        <button class="icon-btn" id="btn-zoomin" title="拡大 (+)">＋</button>
+        <button class="icon-btn" id="btn-fit" title="全体表示 (0)">⤢</button>
+        <div class="sep"></div>
+        <button class="icon-btn" id="btn-export" title="書き出し">⇩</button>
+        <button class="icon-btn" id="btn-import" title="読み込み">⇧</button>
+        <button class="icon-btn" id="btn-share" title="共有リンクを作成">🔗</button>
+        <div class="sep"></div>
+        <button class="icon-btn" id="btn-theme" title="テーマ切替">◐</button>
+      </div>
+      <div id="accountbtn" class="panel" title="アカウント" hidden>
+        <span class="ic">👤</span><span class="lbl" id="account-label">ログイン</span>
+      </div>
     </div>
   </div>
 
   <div id="mapsdrawer" class="panel"></div>
+  <div id="accountdrawer" class="panel"></div>
   <input type="file" id="filepicker" accept="application/json" style="display:none">
 
   <div id="stylepanel" class="panel">
@@ -297,6 +323,9 @@
 <div id="modalveil"><div id="modalbox" class="panel"></div></div>
 <div id="toast"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script>
 (function(){
 "use strict";
@@ -416,6 +445,7 @@ var saveTimer = null;
 function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(persistNow, 350);
+  if(currentUser) pushMapToCloud(state.currentMapId);
 }
 function persistNow(){
   try{
@@ -436,6 +466,149 @@ function loadPersisted(){
   var last = null;
   try{ last = localStorage.getItem(LS_LAST); }catch(e){}
   if(last && state.maps[last]) state.currentMapId = last;
+}
+
+/* ============================== クラウド同期 (Firebase / Googleログイン) ==============================
+   自分の Firebase プロジェクトの設定値をここに貼り付けると、Googleログイン機能が有効になります。
+   Firebase コンソール (https://console.firebase.google.com/) →
+   プロジェクトの設定(⚙) → 全般 → 「マイアプリ」→ ウェブアプリを追加 → 表示される設定値をコピー。
+   未設定のまま(下の YOUR_ で始まる値のまま)でも、アプリはブラウザ内保存のみで問題なく動作します。 */
+var firebaseConfig = {
+  apiKey: "AIzaSyB6HzHLH920Q5TbEzNeFWbaCV5LPQsdxn8",
+  authDomain: "mindloom-65e7e.firebaseapp.com",
+  projectId: "mindloom-65e7e",
+  storageBucket: "mindloom-65e7e.firebasestorage.app",
+  messagingSenderId: "211562022860",
+  appId: "1:211562022860:web:7a8b76fcb90799b6ecff69"
+};
+var firebaseEnabled = !!(typeof firebase !== "undefined" && firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf("YOUR_") !== 0);
+var fbAuth = null, fbDb = null, currentUser = null, cloudUnsub = null;
+var cloudPushTimers = {};
+
+function initFirebase(){
+  if(!firebaseEnabled) return;
+  try{
+    firebase.initializeApp(firebaseConfig);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+    fbAuth.onAuthStateChanged(onAuthChanged);
+  }catch(e){
+    firebaseEnabled = false;
+  }
+}
+
+function onAuthChanged(user){
+  currentUser = user;
+  updateAccountUI();
+  if(cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
+  if(user){
+    mergeLocalMapsToCloud(user.uid).then(function(){
+      subscribeCloudMaps(user.uid);
+    });
+  }
+}
+
+function mergeLocalMapsToCloud(uid){
+  var col = fbDb.collection("users").doc(uid).collection("maps");
+  return col.get().then(function(snap){
+    var existing = {};
+    snap.forEach(function(doc){ existing[doc.id] = true; });
+    var puts = [];
+    Object.keys(state.maps).forEach(function(id){
+      if(!existing[id]){ puts.push(col.doc(id).set(state.maps[id])); }
+    });
+    return Promise.all(puts);
+  }).catch(function(e){ /* best-effort */ });
+}
+
+function subscribeCloudMaps(uid){
+  var col = fbDb.collection("users").doc(uid).collection("maps");
+  cloudUnsub = col.onSnapshot(function(snap){
+    snap.docChanges().forEach(function(change){
+      if(change.doc.metadata.hasPendingWrites) return; // 自分自身の書き込みのエコーは無視(無限ループ防止)
+      var id = change.doc.id;
+      if(change.type === "removed"){
+        delete state.maps[id];
+      } else {
+        state.maps[id] = change.doc.data();
+      }
+    });
+    if(!state.currentMapId || !state.maps[state.currentMapId]){
+      var remain = Object.keys(state.maps);
+      if(remain.length){ switchMap(remain[0]); }
+      else { switchMap(createMap("新しいマインドマップ", false)); }
+    } else {
+      fullRender();
+      renderMapsDrawer();
+    }
+    persistNow();
+  }, function(e){ /* best-effort */ });
+}
+
+function pushMapToCloud(id){
+  if(!currentUser || !fbDb || !id) return;
+  clearTimeout(cloudPushTimers[id]);
+  cloudPushTimers[id] = setTimeout(function(){
+    var m = state.maps[id];
+    if(!m) return;
+    fbDb.collection("users").doc(currentUser.uid).collection("maps").doc(id).set(m).catch(function(e){ /* best-effort */ });
+  }, 500);
+}
+
+function deleteCloudMap(id){
+  if(!currentUser || !fbDb || !id) return;
+  fbDb.collection("users").doc(currentUser.uid).collection("maps").doc(id).delete().catch(function(e){ /* best-effort */ });
+}
+
+function signInWithGoogle(){
+  if(!firebaseEnabled || !fbAuth) return;
+  var provider = new firebase.auth.GoogleAuthProvider();
+  fbAuth.signInWithPopup(provider).catch(function(e){
+    toast("ログインに失敗しました");
+  });
+}
+function signOutUser(){
+  if(fbAuth) fbAuth.signOut();
+}
+
+function updateAccountUI(){
+  var btn = $("#accountbtn");
+  if(!btn) return;
+  if(!firebaseEnabled){ btn.hidden = true; return; }
+  btn.hidden = false;
+  var ic = btn.querySelector(".ic");
+  var lbl = $("#account-label");
+  if(currentUser){
+    lbl.textContent = currentUser.displayName ? currentUser.displayName.split(" ")[0] : "アカウント";
+    ic.innerHTML = "";
+    if(currentUser.photoURL){
+      var img = document.createElement("img"); img.src = currentUser.photoURL; img.alt = "";
+      ic.appendChild(img);
+    } else {
+      ic.textContent = "👤";
+    }
+  } else {
+    lbl.textContent = "ログイン";
+    ic.innerHTML = ""; ic.textContent = "👤";
+  }
+}
+
+function renderAccountDrawer(){
+  var d = $("#accountdrawer");
+  d.innerHTML = "";
+  if(currentUser){
+    var who = document.createElement("div"); who.className = "who"; who.textContent = currentUser.displayName || "アカウント";
+    var email = document.createElement("div"); email.className = "email"; email.textContent = currentUser.email || "";
+    var out = document.createElement("button"); out.className = "btn ghost"; out.textContent = "ログアウト";
+    out.addEventListener("click", function(){ signOutUser(); d.classList.remove("open"); });
+    d.appendChild(who); d.appendChild(email); d.appendChild(out);
+  } else {
+    var hint = document.createElement("div"); hint.className = "signin-hint";
+    hint.textContent = "Googleアカウントでログインすると、マップがクラウドに保存され、他のパソコンやスマホからも同じマップを開けます。ログインしなくても、このブラウザ内だけで問題なく使えます。";
+    var btn = document.createElement("button"); btn.className = "btn primary"; btn.textContent = "Googleでログイン";
+    btn.addEventListener("click", function(){ signInWithGoogle(); d.classList.remove("open"); });
+    d.appendChild(hint); d.appendChild(btn);
+  }
 }
 
 /* ============================== マップ / ノード操作 ============================== */
@@ -1269,6 +1442,7 @@ function renderMapsDrawer(){
       if(ids.length <= 1){ toast("最後のマップは削除できません"); return; }
       confirmModal("マップを削除しますか？", "「" + m.title + "」を完全に削除します。この操作は取り消せません。", "削除する", function(){
         delete state.maps[id];
+        deleteCloudMap(id);
         if(state.currentMapId === id){
           var remain = Object.keys(state.maps);
           switchMap(remain[0]);
@@ -1526,12 +1700,20 @@ function bindToolbar(){
     renderMapsDrawer();
     d.classList.add("open");
   });
+  $("#accountbtn").addEventListener("click", function(e){
+    e.stopPropagation();
+    var d = $("#accountdrawer");
+    if(d.classList.contains("open")){ d.classList.remove("open"); return; }
+    renderAccountDrawer();
+    d.classList.add("open");
+  });
   $("#btn-help").addEventListener("click", function(e){
     e.stopPropagation();
     $("#shortcuts").classList.toggle("open");
   });
   document.addEventListener("click", function(e){
     if(!e.target.closest("#mapsdrawer") && !e.target.closest("#maptitle-btn")) $("#mapsdrawer").classList.remove("open");
+    if(!e.target.closest("#accountdrawer") && !e.target.closest("#accountbtn")) $("#accountdrawer").classList.remove("open");
     if(!e.target.closest("#shortcuts") && !e.target.closest("#btn-help")) $("#shortcuts").classList.remove("open");
     if(!e.target.closest("#stylepanel") && !e.target.closest(".node-card") && !e.target.closest(".node-collapse")){
       // keep panel open while a node stays selected; only closes via deselect elsewhere
@@ -1577,6 +1759,9 @@ function init(){
     window.claude.use("downloads").then(function(api){ downloadsApi = api; }).catch(function(){});
   }
 
+  updateAccountUI();
+  initFirebase();
+
   var params = new URLSearchParams(location.search);
   var sharedPayload = params.get("m");
   if(sharedPayload){
@@ -1601,3 +1786,5 @@ else init();
 
 })();
 </script>
+</body>
+</html>
