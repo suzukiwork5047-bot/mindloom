@@ -328,7 +328,7 @@
     <button class="icon-btn" id="btn-newmap" title="新しいマップ (Tabキーで子ノード追加も可)">＋</button>
   </div>
   <div class="chrome panel" id="bottombar2" style="bottom:16px; left:64px; padding:5px; display:flex; align-items:center; gap:6px;">
-    <span style="font-size:12px; color:var(--ink-soft); padding:0 6px; font-family:var(--font-mono);">Enter: 兄弟追加 / Tab: 子追加 / ⇧+Enter: 改行</span>
+    <span style="font-size:12px; color:var(--ink-soft); padding:0 6px; font-family:var(--font-mono);">Enter: 改行 / ⇧+Enter: 子追加 / Tab: 兄弟追加</span>
   </div>
   <div class="chrome" id="helpbar">
     <button class="icon-btn panel" id="btn-help" title="ショートカット一覧">？</button>
@@ -336,9 +336,9 @@
 
   <div id="shortcuts" class="panel">
     <h4>キーボードショートカット</h4>
-    <div class="row"><span>兄弟ノードを追加</span><kbd>Enter</kbd></div>
-    <div class="row"><span>ノード内で改行</span><kbd>⇧+Enter</kbd></div>
-    <div class="row"><span>子ノードを追加</span><kbd>Tab</kbd></div>
+    <div class="row"><span>ノード内で改行</span><kbd>Enter</kbd></div>
+    <div class="row"><span>子ノードを追加</span><kbd>⇧+Enter</kbd></div>
+    <div class="row"><span>兄弟ノードを追加</span><kbd>Tab</kbd></div>
     <div class="row"><span>編集開始</span><kbd>F2 / ダブルクリック</kbd></div>
     <div class="row"><span>ノードを削除</span><kbd>Delete</kbd></div>
     <div class="row"><span>複製</span><kbd>⌘/Ctrl+D</kbd></div>
@@ -1211,19 +1211,19 @@ function attachNodeEvents(id, wrapper, card, textEl, collapseBtn){
     if(e.isComposing || e.keyCode === 229) return;
     if(e.key === "Enter" && e.shiftKey){
       e.preventDefault();
-      insertLineBreakAtCaret(textEl);
-      var n0 = getNode(id); if(n0){ n0.text = textEl.textContent; relayoutSoft(); }
-    } else if(e.key === "Enter"){
-      e.preventDefault();
-      commitEdit(id);
-      if(id === "root"){ var cid = addChild(id, ""); fullRender(); startEditing(cid); }
-      else { var sid = addSibling(id, ""); fullRender(); startEditing(sid); }
-    } else if(e.key === "Tab"){
-      e.preventDefault();
       commitEdit(id);
       var cid2 = addChild(id, "");
       var n = getNode(id); n.collapsed = false;
       fullRender(); startEditing(cid2);
+    } else if(e.key === "Enter"){
+      e.preventDefault();
+      insertLineBreakAtCaret(textEl);
+      var n0 = getNode(id); if(n0){ n0.text = textEl.textContent; relayoutSoft(); }
+    } else if(e.key === "Tab"){
+      e.preventDefault();
+      commitEdit(id);
+      var sid = addSibling(id, "");
+      fullRender(); startEditing(sid);
     } else if(e.key === "Escape"){
       e.preventDefault();
       cancelEdit(id);
@@ -1239,7 +1239,7 @@ function attachNodeEvents(id, wrapper, card, textEl, collapseBtn){
   });
 }
 
-/* Shift+Enter でキャレット位置に改行(テキストノード)を挿入する。
+/* Enter でキャレット位置に改行(テキストノード)を挿入する。
    ブラウザ標準のEnter挿入(<div>や<br>)に頼らず、常に textContent が
    素直な "\n" を持つようにして、折り返し計算(measureNodeBox)と
    表示(white-space:pre-wrap)を一致させる。 */
@@ -1796,15 +1796,18 @@ function bindKeyboard(){
       }
       return;
     }
-    if(e.key === "Enter"){
-      e.preventDefault();
-      if(state.selectedId === "root"){ var cid=addChild("root",""); fullRender(); startEditing(cid); }
-      else { var sid = addSibling(state.selectedId, ""); fullRender(); startEditing(sid); }
-    } else if(e.key === "Tab"){
+    if(e.key === "Enter" && e.shiftKey){
       e.preventDefault();
       var cid2 = addChild(state.selectedId, "");
       getNode(state.selectedId).collapsed = false;
       fullRender(); startEditing(cid2);
+    } else if(e.key === "Enter"){
+      e.preventDefault();
+      startEditing(state.selectedId);
+    } else if(e.key === "Tab"){
+      e.preventDefault();
+      var sid = addSibling(state.selectedId, "");
+      fullRender(); startEditing(sid);
     } else if(e.key === "F2"){
       e.preventDefault(); startEditing(state.selectedId);
     } else if(e.key === "Delete" || e.key === "Backspace"){
