@@ -172,6 +172,11 @@
   #mapsdrawer .newmap:hover{background:var(--accent-soft); border-color:var(--accent);}
   #mapsdrawer .divider{height:1px; background:var(--border); margin:6px 2px;}
   #mapsdrawer .hint{font-size:11.5px; color:var(--ink-soft); padding:6px 10px 2px;}
+  #mapsdrawer .section-label{font-size:11px; color:var(--ink-soft); padding:8px 10px 2px; text-transform:uppercase; letter-spacing:.05em;}
+  #mapsdrawer .row .owner{font-size:11px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:90px;}
+  #mapsdrawer .row .eye{font-size:12px; opacity:.7;}
+
+  #readonlybanner{top:64px; left:50%; transform:translateX(-50%); padding:8px 16px; font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:6px; background:var(--accent-soft); color:var(--ink); white-space:nowrap;}
 
   #stylepanel{position:absolute; top:64px; right:16px; width:250px; padding:14px; display:none; z-index:20;}
   #stylepanel.open{display:block;}
@@ -213,9 +218,16 @@
   #modalbox{width:380px; padding:22px; border-radius:18px;}
   #modalbox h3{margin:0 0 8px; font-family:var(--font-display); font-size:19px; font-weight:600;}
   #modalbox p{margin:0 0 16px; font-size:13.5px; color:var(--ink-soft); line-height:1.55;}
-  #modalbox .linkrow{display:flex; gap:8px; margin-bottom:14px;}
-  #modalbox input[type=text]{flex:1; border:1.4px solid var(--border); border-radius:9px; padding:9px 10px; font-size:13px; font-family:var(--font-mono); background:var(--surface-2); color:var(--ink);}
+  #modalbox input[type=text], #modalbox input[type=email]{flex:1; border:1.4px solid var(--border); border-radius:9px; padding:9px 10px; font-size:13px; font-family:var(--font-mono); background:var(--surface-2); color:var(--ink);}
   #modalbox .actrow{margin-top:4px;}
+  #modalbox .share-hint{font-size:12.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 12px;}
+  #modalbox .viewer-list{display:flex; flex-direction:column; gap:6px; margin-bottom:10px; max-height:160px; overflow:auto;}
+  #modalbox .viewer-empty{font-size:12px; color:var(--ink-soft); padding:4px 2px;}
+  #modalbox .viewer-row{display:flex; align-items:center; gap:8px; background:var(--surface-2); border-radius:8px; padding:7px 10px;}
+  #modalbox .viewer-row .addr{flex:1; font-size:12.5px; font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  #modalbox .viewer-row .rm{font-size:11.5px; color:var(--ink-soft); background:none; border:none; cursor:pointer; padding:2px 4px;}
+  #modalbox .viewer-row .rm:hover{color:var(--danger);}
+  #modalbox .viewer-addrow{display:flex; gap:8px;}
 
   #toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(10px); padding:11px 18px; border-radius:11px; background:var(--ink); color:var(--bg); font-size:13px; font-weight:500; z-index:200; opacity:0; transition:opacity .18s ease, transform .18s ease; pointer-events:none;}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
@@ -275,7 +287,7 @@
         <div class="sep"></div>
         <button class="icon-btn" id="btn-export" title="書き出し">⇩</button>
         <button class="icon-btn" id="btn-import" title="読み込み (JSON / FreeMind .mm)">⇧</button>
-        <button class="icon-btn" id="btn-share" title="共有リンクを作成">🔗</button>
+        <button class="icon-btn" id="btn-share" title="閲覧権限を付与">🔗</button>
         <div class="sep"></div>
         <button class="icon-btn" id="btn-theme" title="テーマ切替">◐</button>
       </div>
@@ -334,6 +346,8 @@
     <button class="icon-btn panel" id="btn-help" title="ショートカット一覧">？</button>
   </div>
 
+  <div class="chrome panel" id="readonlybanner" hidden>👁 閲覧専用で共有されたマップです(作成者: <span id="readonlybanner-owner"></span>)</div>
+
   <div id="shortcuts" class="panel">
     <h4>キーボードショートカット</h4>
     <div class="row"><span>ノード内で改行</span><kbd>Enter</kbd></div>
@@ -379,7 +393,8 @@ var state = {
   view: {x:0, y:0, scale:1},
   theme: "system",
   connectMode: false,
-  selectedRelationId: null
+  selectedRelationId: null,
+  viewingSharedKey: null // 閲覧専用で開いている他人の共有マップのキー("ownerUid::mapId")。null なら自分のマップを見ている
 };
 var historyStack = [];
 var redoStack = [];
@@ -474,6 +489,7 @@ var LS_MAPS = "mindloom.maps.v1";
 var LS_LAST = "mindloom.lastMapId.v1";
 var saveTimer = null;
 function scheduleSave(){
+  if(isReadOnlyMap()) return; // 閲覧専用で共有されたマップは一切保存しない(安全装置)
   clearTimeout(saveTimer);
   saveTimer = setTimeout(persistNow, 350);
   if(currentUser) pushMapToCloud(state.currentMapId);
@@ -515,6 +531,10 @@ var firebaseConfig = {
 var firebaseEnabled = !!(typeof firebase !== "undefined" && firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf("YOUR_") !== 0);
 var fbAuth = null, fbDb = null, currentUser = null, cloudUnsub = null;
 var cloudPushTimers = {};
+/* 他人が「閲覧権限」を付与してくれたマップ(閲覧専用)。キーは "ownerUid::mapId"。
+   state.maps とは別の入れ物にして、誤って自分のクラウド保存・ローカル保存に混ざらないようにする。 */
+var sharedMaps = {};
+var sharedCloudUnsub = null;
 
 function initFirebase(){
   if(!firebaseEnabled) return;
@@ -532,11 +552,47 @@ function onAuthChanged(user){
   currentUser = user;
   updateAccountUI();
   if(cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
+  if(sharedCloudUnsub){ sharedCloudUnsub(); sharedCloudUnsub = null; }
+  sharedMaps = {};
+  state.viewingSharedKey = null;
   if(user){
     mergeLocalMapsToCloud(user.uid).then(function(){
       subscribeCloudMaps(user.uid);
     });
+    if(user.email) subscribeSharedMaps(user.email);
+  } else {
+    fullRender(); renderMapsDrawer();
   }
+}
+
+function subscribeSharedMaps(email){
+  if(!fbDb || !fbDb.collectionGroup) return;
+  sharedCloudUnsub = fbDb.collectionGroup("maps")
+    .where("viewerEmails", "array-contains", email)
+    .onSnapshot(function(snap){
+      var keys = {};
+      snap.forEach(function(doc){
+        var ownerUid = doc.ref.parent.parent ? doc.ref.parent.parent.id : null;
+        if(!ownerUid || ownerUid === currentUser.uid) return; // 自分自身のマップは除外
+        var key = ownerUid + "::" + doc.id;
+        keys[key] = true;
+        var data = doc.data();
+        data.__shared = true;
+        data.__ownerUid = ownerUid;
+        sharedMaps[key] = data;
+      });
+      Object.keys(sharedMaps).forEach(function(key){
+        if(!keys[key]){
+          delete sharedMaps[key];
+          if(state.viewingSharedKey === key) state.viewingSharedKey = null;
+        }
+      });
+      if(state.viewingSharedKey && !sharedMaps[state.viewingSharedKey]){
+        state.viewingSharedKey = null;
+      }
+      fullRender();
+      renderMapsDrawer();
+    }, function(e){ /* best-effort: インデックス未作成時はブラウザのコンソールに作成用リンクが出る */ });
 }
 
 function mergeLocalMapsToCloud(uid){
@@ -546,7 +602,10 @@ function mergeLocalMapsToCloud(uid){
     snap.forEach(function(doc){ existing[doc.id] = true; });
     var puts = [];
     Object.keys(state.maps).forEach(function(id){
-      if(!existing[id]){ puts.push(col.doc(id).set(state.maps[id])); }
+      if(!existing[id]){
+        state.maps[id].ownerEmail = currentUser.email || "";
+        puts.push(col.doc(id).set(state.maps[id]));
+      }
     });
     return Promise.all(puts);
   }).catch(function(e){ /* best-effort */ });
@@ -582,6 +641,7 @@ function pushMapToCloud(id){
   cloudPushTimers[id] = setTimeout(function(){
     var m = state.maps[id];
     if(!m) return;
+    m.ownerEmail = currentUser.email || "";
     fbDb.collection("users").doc(currentUser.uid).collection("maps").doc(id).set(m).catch(function(e){ /* best-effort */ });
   }, 500);
 }
@@ -683,7 +743,20 @@ function fillSample(m){
   });
 }
 
-function getMap(){ return state.maps[state.currentMapId] || null; }
+function getMap(){
+  if(state.viewingSharedKey) return sharedMaps[state.viewingSharedKey] || null;
+  return state.maps[state.currentMapId] || null;
+}
+function isReadOnlyMap(){
+  var m = getMap();
+  return !!(m && m.__shared);
+}
+function getViewerEmails(m){
+  m = m || getMap();
+  if(!m) return [];
+  if(!m.viewerEmails) m.viewerEmails = [];
+  return m.viewerEmails;
+}
 function getNode(id){ var m=getMap(); return m ? m.nodes[id] : null; }
 function getChildren(id){
   var m = getMap(); if(!m) return [];
@@ -721,6 +794,7 @@ function pushHistory(){
   redoStack.length = 0;
 }
 function undo(){
+  if(isReadOnlyMap()) return;
   var m = getMap(); if(!m || historyStack.length===0) return;
   redoStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId, relations:m.relations||{}}));
   var prev = JSON.parse(historyStack.pop());
@@ -730,6 +804,7 @@ function undo(){
   fullRender(); scheduleSave();
 }
 function redo(){
+  if(isReadOnlyMap()) return;
   var m = getMap(); if(!m || redoStack.length===0) return;
   historyStack.push(JSON.stringify({nodes:m.nodes, rootId:m.rootId, relations:m.relations||{}}));
   var next = JSON.parse(redoStack.pop());
@@ -739,6 +814,7 @@ function redo(){
 }
 
 function addChild(parentId, text){
+  if(isReadOnlyMap()) return null;
   var m = getMap(); if(!m) return null;
   pushHistory();
   var siblings = getChildren(parentId);
@@ -749,6 +825,7 @@ function addChild(parentId, text){
   return n.id;
 }
 function addSibling(nodeId, text){
+  if(isReadOnlyMap()) return null;
   var n = getNode(nodeId);
   if(!n || !n.parentId) return addChild(nodeId, text);
   var m = getMap();
@@ -769,6 +846,7 @@ function collectSubtree(id, acc){
   return acc;
 }
 function deleteNode(id){
+  if(isReadOnlyMap()) return;
   if(id === "root") { toast("中心ノードは削除できません"); return; }
   var m = getMap(); if(!m) return;
   var ids = collectSubtree(id);
@@ -795,6 +873,7 @@ function deleteNode(id){
   }
 }
 function duplicateNode(id){
+  if(isReadOnlyMap()) return;
   if(id === "root"){ toast("中心ノードは複製できません"); return; }
   var m = getMap(); var src = getNode(id); if(!src) return;
   pushHistory();
@@ -910,6 +989,7 @@ function initSvgRefs(){
   nodesEl = $("#nodes");
   relationsEl.addEventListener("mousedown", function(e){
     if(e.button !== 0) return;
+    if(isReadOnlyMap()) return;
     var t = e.target.closest ? e.target.closest("[data-rel-id]") : null;
     if(!t) return;
     e.stopPropagation();
@@ -1082,6 +1162,7 @@ function fullRender(){
   applyViewTransform();
   updateUndoRedoButtons();
   updateMapTitleUI();
+  updateReadOnlyBanner();
 }
 function updateUndoRedoButtons(){
   $("#btn-undo").disabled = historyStack.length === 0;
@@ -1185,6 +1266,7 @@ function attachNodeEvents(id, wrapper, card, textEl, collapseBtn){
     if(e.button !== 0) return;
     if(e.target === textEl && state.editingId === id) return;
     e.stopPropagation();
+    if(isReadOnlyMap()){ selectNode(id); return; }
     if(state.connectMode){
       startRelationDrag(id, e);
       return;
@@ -1303,6 +1385,7 @@ function onNodeDragUp(){
 var relationDragState = null;
 var tempRelationPathEl = null;
 function startRelationDrag(fromId, e){
+  if(isReadOnlyMap()) return;
   if(!lastLayout || !lastLayout.pos[fromId]) return;
   relationDragState = { fromId: fromId };
   if(!tempRelationPathEl){
@@ -1328,7 +1411,7 @@ function onRelationDragUp(e){
   if(tempRelationPathEl && tempRelationPathEl.parentNode) tempRelationPathEl.parentNode.removeChild(tempRelationPathEl);
   var st = relationDragState;
   relationDragState = null;
-  if(!st) return;
+  if(!st || isReadOnlyMap()) return;
   var targetEl = document.elementFromPoint(e.clientX, e.clientY);
   var wrapper = targetEl && targetEl.closest ? targetEl.closest(".node-outer") : null;
   if(wrapper){
@@ -1508,6 +1591,7 @@ function openRelationEditor(relId){
 /* ============================== 編集 ============================== */
 var editOriginalText = "";
 function startEditing(id){
+  if(isReadOnlyMap()) return;
   var n = getNode(id); if(!n) return;
   if(state.editingId && state.editingId !== id) commitEdit(state.editingId);
   state.editingId = id;
@@ -1657,6 +1741,7 @@ function buildStylePanelStatic(){
   $("#btn-delete").addEventListener("click", function(){ if(state.selectedId) deleteNode(state.selectedId); });
 }
 function applyStyleChange(patch){
+  if(isReadOnlyMap()) return;
   var n = getNode(state.selectedId); if(!n) return;
   pushHistory();
   Object.keys(patch).forEach(function(k){ n[k] = patch[k]; });
@@ -1666,8 +1751,9 @@ function refreshStylePanel(){
   var n = getNode(state.selectedId);
   if(!n){ closeStylePanelIfNoSel(); return; }
   var isRoot = n.id === "root";
-  $("#stylepanel").style.opacity = isRoot ? .55 : 1;
-  $("#stylepanel").style.pointerEvents = isRoot ? "none" : "auto";
+  var locked = isRoot || isReadOnlyMap();
+  $("#stylepanel").style.opacity = locked ? .55 : 1;
+  $("#stylepanel").style.pointerEvents = locked ? "none" : "auto";
   var colorIdx = nodeBranchColorIndex(n.id);
   $("#colorrow").querySelectorAll(".swatch").forEach(function(sw, i){
     if(sw.classList.contains("custom")) return;
@@ -1690,8 +1776,8 @@ function refreshStylePanel(){
   document.querySelectorAll("#sizeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.v === (n.size||"m")); });
   document.querySelectorAll("#shapeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.v === (n.shape||"text")); });
   document.querySelectorAll("#emojirow button").forEach(function(b){ b.classList.toggle("on", b.textContent === n.icon); });
-  $("#btn-delete").style.display = isRoot ? "none" : "";
-  $("#btn-duplicate").style.display = isRoot ? "none" : "";
+  $("#btn-delete").style.display = (isRoot || isReadOnlyMap()) ? "none" : "";
+  $("#btn-duplicate").style.display = (isRoot || isReadOnlyMap()) ? "none" : "";
 }
 
 /* ============================== ズーム / パン ============================== */
@@ -1799,7 +1885,7 @@ function bindKeyboard(){
     if(e.key === "Enter" && e.shiftKey){
       e.preventDefault();
       var cid2 = addChild(state.selectedId, "");
-      getNode(state.selectedId).collapsed = false;
+      if(cid2) getNode(state.selectedId).collapsed = false;
       fullRender(); startEditing(cid2);
     } else if(e.key === "Enter"){
       e.preventDefault();
@@ -1842,6 +1928,17 @@ function updateMapTitleUI(){
   var m = getMap();
   $("#maptitle-text").textContent = m ? m.title : "マップ";
 }
+function updateReadOnlyBanner(){
+  var m = getMap();
+  var banner = $("#readonlybanner");
+  if(!banner) return;
+  if(m && m.__shared){
+    banner.hidden = false;
+    $("#readonlybanner-owner").textContent = m.ownerEmail || "不明";
+  } else {
+    banner.hidden = true;
+  }
+}
 function renderMapsDrawer(){
   var d = $("#mapsdrawer");
   d.innerHTML = "";
@@ -1849,7 +1946,7 @@ function renderMapsDrawer(){
   ids.forEach(function(id){
     var m = state.maps[id];
     var row = document.createElement("div");
-    row.className = "row" + (id===state.currentMapId ? " current" : "");
+    row.className = "row" + (id===state.currentMapId && !state.viewingSharedKey ? " current" : "");
     var ttl = document.createElement("div"); ttl.className="ttl"; ttl.textContent = m.title;
     var meta = document.createElement("div"); meta.className="meta"; meta.textContent = "";
     var del = document.createElement("div"); del.className="del"; del.textContent="✕";
@@ -1882,9 +1979,31 @@ function renderMapsDrawer(){
     d.classList.remove("open");
   });
   d.appendChild(nm);
+
+  var sharedKeys = Object.keys(sharedMaps).sort(function(a,b){ return (sharedMaps[b].updatedAt||0) - (sharedMaps[a].updatedAt||0); });
+  if(sharedKeys.length > 0){
+    var sdivider = document.createElement("div"); sdivider.className="divider"; d.appendChild(sdivider);
+    var slabel = document.createElement("div"); slabel.className="section-label"; slabel.textContent="共有されたマップ(閲覧専用)";
+    d.appendChild(slabel);
+    sharedKeys.forEach(function(key){
+      var sm = sharedMaps[key];
+      var srow = document.createElement("div");
+      srow.className = "row" + (key===state.viewingSharedKey ? " current" : "");
+      var sttl = document.createElement("div"); sttl.className="ttl"; sttl.textContent = sm.title;
+      var sowner = document.createElement("div"); sowner.className="owner"; sowner.textContent = sm.ownerEmail || "";
+      var seye = document.createElement("div"); seye.className="eye"; seye.textContent="👁";
+      srow.appendChild(sttl); srow.appendChild(sowner); srow.appendChild(seye);
+      srow.addEventListener("click", function(){
+        openSharedMap(key);
+        d.classList.remove("open");
+      });
+      d.appendChild(srow);
+    });
+  }
 }
 function switchMap(id){
   if(!state.maps[id]) return;
+  state.viewingSharedKey = null;
   state.currentMapId = id;
   state.selectedId = null; state.editingId = null;
   historyStack.length = 0; redoStack.length = 0;
@@ -1892,6 +2011,18 @@ function switchMap(id){
   state.view = {x:0,y:0,scale:1};
   closeStylePanelIfNoSel();
   fullRender(); scheduleSave();
+  fitToScreen();
+}
+function openSharedMap(key){
+  if(!sharedMaps[key]) return;
+  state.viewingSharedKey = key;
+  state.selectedId = null; state.editingId = null; state.selectedRelationId = null;
+  state.connectMode = false;
+  historyStack.length = 0; redoStack.length = 0;
+  nodeEls = {}; nodesEl.innerHTML=""; connectorsEl.innerHTML="";
+  state.view = {x:0,y:0,scale:1};
+  closeStylePanelIfNoSel();
+  fullRender();
   fitToScreen();
 }
 
@@ -2111,45 +2242,78 @@ function parseFreeMindXML(xmlText){
 }
 
 /* ==============================================================
-   共有: サーバーもアカウントも使わず、マップのデータをリンクの
-   中に丸ごと埋め込む方式。誰でも(組織や登録の有無に関係なく)
-   リンクを開けば同じマップのコピーを取得できる。
+   閲覧権限: 特定のメールアドレスにだけ、マップを閲覧専用(編集不可)で
+   開けるようにする。共有リンクのようにURLでデータを丸ごと渡す方式は
+   廃止し、Googleアカウント(メールアドレス)単位の権限付与のみを使う。
    ============================================================== */
-function encodeMapForUrl(m){
-  var payload = {title:m.title, rootId:m.rootId, nodes:m.nodes, relations:m.relations||{}};
-  var json = JSON.stringify(payload);
-  var b64 = btoa(unescape(encodeURIComponent(json)));
-  return b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-}
-function decodeMapFromUrl(str){
-  var b64 = str.replace(/-/g,"+").replace(/_/g,"/");
-  while(b64.length % 4) b64 += "=";
-  var json = decodeURIComponent(escape(atob(b64)));
-  return JSON.parse(json);
-}
 function openShareModal(){
   var m = getMap(); if(!m) return;
-  var url = location.origin + location.pathname + "?m=" + encodeMapForUrl(m);
+  if(isReadOnlyMap()){ toast("他の人から共有されたマップのため、ここからの権限付与はできません"); return; }
   var wrap = document.createElement("div");
-  var p = document.createElement("p");
-  if(url.length > 7000){
-    p.textContent = "このマップは情報量が多く、リンクがかなり長くなります。うまく開けない場合は下の「JSONで書き出す」を使ってファイルで送ってください。";
+
+  if(!firebaseEnabled || !currentUser){
+    var hint = document.createElement("p"); hint.className = "share-hint";
+    hint.textContent = "Googleアカウントでログインすると、相手のメールアドレスを指定して「閲覧のみ」の権限を付与できます(相手も同じメールアドレスでログインする必要があります)。";
+    wrap.appendChild(hint);
+    if(firebaseEnabled){
+      var loginBtn = document.createElement("button"); loginBtn.className = "btn primary"; loginBtn.style.marginTop = "6px";
+      loginBtn.textContent = "Googleでログイン";
+      loginBtn.addEventListener("click", function(){ $("#modalveil").classList.remove("open"); signInWithGoogle(); });
+      wrap.appendChild(loginBtn);
+    }
   } else {
-    p.textContent = "このリンクを開くと、誰でも(組織や登録の有無に関わらず)このマップのコピーを自分のMindloomに取り込めます。相手側の編集はあなたのマップには反映されません。";
+    var hint2 = document.createElement("p"); hint2.className = "share-hint";
+    hint2.textContent = "下に追加したメールアドレスでGoogleログインした相手は、このマップを閲覧専用(編集不可)で開けるようになります。";
+    wrap.appendChild(hint2);
+
+    var list = document.createElement("div"); list.className = "viewer-list";
+    wrap.appendChild(list);
+
+    function renderList(){
+      list.innerHTML = "";
+      var emails = getViewerEmails(m);
+      if(emails.length === 0){
+        var empty = document.createElement("div"); empty.className = "viewer-empty";
+        empty.textContent = "まだ誰も追加されていません";
+        list.appendChild(empty);
+      }
+      emails.forEach(function(addr){
+        var row3 = document.createElement("div"); row3.className = "viewer-row";
+        var span = document.createElement("span"); span.className = "addr"; span.textContent = addr;
+        var rm = document.createElement("button"); rm.className = "rm"; rm.textContent = "削除"; rm.type = "button";
+        rm.addEventListener("click", function(){
+          var arr = getViewerEmails(m);
+          var idx = arr.indexOf(addr);
+          if(idx !== -1){ arr.splice(idx,1); scheduleSave(); renderList(); toast("閲覧権限を削除しました"); }
+        });
+        row3.appendChild(span); row3.appendChild(rm);
+        list.appendChild(row3);
+      });
+    }
+    renderList();
+
+    var addRow = document.createElement("div"); addRow.className = "viewer-addrow";
+    var addInp = document.createElement("input"); addInp.type = "email"; addInp.placeholder = "相手のメールアドレス(Googleアカウント)";
+    var addBtn = document.createElement("button"); addBtn.className = "btn ghost"; addBtn.textContent = "追加する"; addBtn.style.flex = "0 0 auto";
+    function doAdd(){
+      var addr = (addInp.value || "").trim().toLowerCase();
+      if(!addr) return;
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)){ toast("メールアドレスの形式が正しくありません"); return; }
+      var arr = getViewerEmails(m);
+      if(arr.indexOf(addr) !== -1){ toast("すでに追加されています"); return; }
+      arr.push(addr);
+      scheduleSave();
+      addInp.value = "";
+      renderList();
+      toast("閲覧権限を付与しました");
+    }
+    addBtn.addEventListener("click", doAdd);
+    addInp.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); doAdd(); } });
+    addRow.appendChild(addInp); addRow.appendChild(addBtn);
+    wrap.appendChild(addRow);
   }
-  var row = document.createElement("div"); row.className = "linkrow";
-  var inp = document.createElement("input"); inp.type="text"; inp.readOnly=true; inp.value = url;
-  var copyBtn = document.createElement("button"); copyBtn.className="btn primary"; copyBtn.textContent="コピー"; copyBtn.style.flex="0 0 auto";
-  copyBtn.addEventListener("click", function(){
-    navigator.clipboard.writeText(url).then(function(){ toast("リンクをコピーしました"); }).catch(function(){ inp.select(); });
-  });
-  row.appendChild(inp); row.appendChild(copyBtn);
-  var row2 = document.createElement("div"); row2.className = "actrow";
-  var jsonBtn = document.createElement("button"); jsonBtn.className="btn ghost"; jsonBtn.textContent="JSONで書き出す";
-  jsonBtn.addEventListener("click", exportJSON);
-  row2.appendChild(jsonBtn);
-  wrap.appendChild(p); wrap.appendChild(row); wrap.appendChild(row2);
-  infoModal("マップを共有", wrap, "閉じる");
+
+  infoModal("閲覧権限を付与", wrap, "閉じる");
 }
 
 /* ============================== テーマ ============================== */
@@ -2168,6 +2332,7 @@ function cycleTheme(){
 
 /* ============================== ツールバー配線 ============================== */
 function setConnectMode(on){
+  if(on && isReadOnlyMap()){ toast("閲覧専用のマップでは使用できません"); return; }
   state.connectMode = !!on;
   var btn = $("#btn-connect");
   if(btn) btn.classList.toggle("active", state.connectMode);
@@ -2265,24 +2430,6 @@ function init(){
 
   updateAccountUI();
   initFirebase();
-
-  var params = new URLSearchParams(location.search);
-  var sharedPayload = params.get("m");
-  if(sharedPayload){
-    try{
-      var data = decodeMapFromUrl(sharedPayload);
-      if(!data.nodes || !data.rootId) throw new Error("invalid");
-      var id = uid();
-      var m = {id:id, title:data.title||"共有マップ", rootId:data.rootId, nodes:data.nodes, relations:data.relations||{}, createdAt:Date.now(), updatedAt:Date.now()};
-      state.maps[id] = m;
-      switchMap(id);
-      // URL からリンク文字列を消しておく(ブックマーク/リロード時の混乱防止)
-      history.replaceState(null, "", location.origin + location.pathname);
-      toast("共有されたマップを取り込みました");
-    }catch(e){
-      toast("共有リンクの読み込みに失敗しました");
-    }
-  }
 }
 
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
