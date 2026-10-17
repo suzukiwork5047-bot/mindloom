@@ -536,6 +536,23 @@ var cloudPushTimers = {};
    state.maps とは別の入れ物にして、誤って自分のクラウド保存・ローカル保存に混ざらないようにする。 */
 var sharedMaps = {};
 var sharedCloudUnsub = null;
+/* URLの ?shared=ownerUid::mapId を開いた際、権限付与済みのメールアドレスで
+   ログインしていれば、マップ一覧から探さずに直接そのマップを開く仕組み。
+   (以前の「共有リンク」のようにデータそのものをURLに載せる方式ではなく、
+    あくまで「どのマップを開くか」の目印に過ぎず、閲覧できるかどうかは
+    Firestoreのルール・viewerEmailsによる権限チェックに委ねている) */
+var pendingSharedKey = null;
+var pendingSharedKeyNoticeTimer = null;
+function schedulePendingSharedKeyNotice(){
+  if(pendingSharedKeyNoticeTimer) return;
+  pendingSharedKeyNoticeTimer = setTimeout(function(){
+    pendingSharedKeyNoticeTimer = null;
+    if(pendingSharedKey){
+      toast("リンク先のマップへの閲覧権限が見つかりません。権限が付与されたGoogleアカウントでログインしているか確認してください");
+      pendingSharedKey = null;
+    }
+  }, 4000);
+}
 
 function initFirebase(){
   if(!firebaseEnabled) return;
@@ -563,6 +580,9 @@ function onAuthChanged(user){
     if(user.email) subscribeSharedMaps(user.email);
   } else {
     fullRender(); renderMapsDrawer();
+    if(pendingSharedKey){
+      toast("このマップを閲覧するには、権限が付与されたGoogleアカウントでログインしてください");
+    }
   }
 }
 
@@ -590,6 +610,15 @@ function subscribeSharedMaps(email){
       });
       if(state.viewingSharedKey && !sharedMaps[state.viewingSharedKey]){
         state.viewingSharedKey = null;
+      }
+      if(pendingSharedKey){
+        if(sharedMaps[pendingSharedKey]){
+          var keyToOpen = pendingSharedKey;
+          pendingSharedKey = null;
+          openSharedMap(keyToOpen);
+        } else {
+          schedulePendingSharedKeyNotice();
+        }
       }
       fullRender();
       renderMapsDrawer();
@@ -2267,6 +2296,22 @@ function openShareModal(){
     hint2.textContent = "下に追加したメールアドレスでGoogleログインした相手は、このマップを閲覧専用(編集不可)で開けるようになります。";
     wrap.appendChild(hint2);
 
+    var linkHint = document.createElement("p"); linkHint.className = "share-hint";
+    linkHint.textContent = "下で権限を付与した相手が、そのGoogleアカウントでログイン済みの状態でこのリンクを開くと、一覧から探さずに直接このマップが開きます(権限がない場合は開けません)。";
+    wrap.appendChild(linkHint);
+
+    var linkBtn = document.createElement("button"); linkBtn.className = "btn ghost"; linkBtn.style.marginBottom = "10px";
+    linkBtn.textContent = "開くためのリンクをコピー";
+    linkBtn.addEventListener("click", function(){
+      var url = location.origin + location.pathname + "?shared=" + encodeURIComponent(currentUser.uid + "::" + m.id);
+      function done(){ toast("リンクをコピーしました"); }
+      function fail(){ toast("コピーに失敗しました: " + url); }
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(done).catch(fail);
+      } else { fail(); }
+    });
+    wrap.appendChild(linkBtn);
+
     var list = document.createElement("div"); list.className = "viewer-list";
     wrap.appendChild(list);
 
@@ -2406,6 +2451,14 @@ function openExportMenu(){
 /* ============================== 初期化 ============================== */
 function init(){
   initSvgRefs();
+  try{
+    var qs = new URLSearchParams(location.search);
+    var sharedParam = qs.get("shared");
+    if(sharedParam){
+      pendingSharedKey = sharedParam;
+      history.replaceState(null, "", location.pathname + location.hash);
+    }
+  }catch(e){}
   loadPersisted();
   try{ var t = localStorage.getItem("mindloom.theme"); if(t) state.theme = t; }catch(e){}
   applyTheme();
